@@ -1,0 +1,31 @@
+.cover-thumb {
+  position: relative;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.cover-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.cover-thumb--placeholder {
+  border: 1px dashed var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+}
+
+.cover-thumb--placeholder svg {
+  width: 40%;
+  height: 40%;
+}
+
+button.cover-thumb--placeholder {
+  cursor: default;
+}

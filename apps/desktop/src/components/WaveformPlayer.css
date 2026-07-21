@@ -1,0 +1,63 @@
+.waveform {
+  padding: 10px 0 4px;
+}
+
+.waveform__pins {
+  height: 12px;
+  position: relative;
+  margin-bottom: 2px;
+}
+
+.waveform__body {
+  position: relative;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.waveform__bar {
+  flex: 1 1 0;
+  min-width: 1px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.waveform__bar span {
+  display: block;
+  width: 100%;
+  min-height: 2px;
+  border-radius: 1px;
+  background: var(--text-faint);
+  opacity: 0.55;
+}
+
+.waveform__bar.is-played span {
+  background: var(--accent);
+  opacity: 1;
+}
+
+.waveform__loading {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.waveform__meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
