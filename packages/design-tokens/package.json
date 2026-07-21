@@ -1,0 +1,11 @@
+{
+  "name": "@session/design-tokens",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "tokens.css",
+  "exports": {
+    "./tokens.css": "./tokens.css",
+    "./fonts/*": "./fonts/*"
+  }
+}

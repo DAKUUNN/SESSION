@@ -1,0 +1,71 @@
+/* Session — "Signal" design tokens.
+   Chosen direction: precise, a little clinical, ink-blue-black ground with a
+   phosphor-teal trace color. Single deliberate visual world, not a light/dark pair. */
+
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/archivo-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./fonts/archivo-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Public Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/public-sans-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Public Sans";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./fonts/public-sans-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/jetbrains-mono-400.woff2") format("woff2");
+}
+
+:root {
+  /* surfaces */
+  --bg: #0c1016;
+  --surface: #121821;
+  --surface-2: #182029;
+  --raised: #1e2731;
+
+  /* borders */
+  --border: #26313d;
+  --border-soft: #1c2530;
+
+  /* text */
+  --text: #e7edf2;
+  --text-dim: #8695a3;
+  --text-faint: #7c8996;
+
+  /* accent */
+  --accent: #4fd7c4;
+  --accent-ink: #06110f;
+  --accent-2: #f2a33e;
+
+  /* type */
+  --font-display: "Archivo", sans-serif;
+  --font-body: "Public Sans", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  /* shape */
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-pill: 2px;
+}

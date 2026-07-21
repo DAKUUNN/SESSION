@@ -1,0 +1,13 @@
+{
+  "name": "session",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run tauri dev --workspace=desktop",
+    "build": "npm run tauri build --workspace=desktop"
+  }
+}
