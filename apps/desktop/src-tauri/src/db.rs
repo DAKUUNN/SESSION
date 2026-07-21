@@ -1,7 +1,7 @@
 use crate::models::{FileRef, Favorite, Playlist, PlaylistItem, Project, ProjectDetail, Track, Version};
 use crate::waveform;
 use parking_lot::Mutex;
-use rusqlite::Connection;
+use rusqlite::{params, Connection, Row};
 use std::collections::HashMap;
 use tauri::State;
 
@@ -76,30 +76,238 @@ pub fn init(app_data_dir: &std::path::Path) -> Result<Connection, String> {
     Ok(conn)
 }
 
+// ---------- Row mapping helpers ----------
+
+fn file_ref_from_parts(
+    source: Option<String>,
+    path: Option<String>,
+    rev: Option<String>,
+    fingerprint: Option<String>,
+) -> Option<FileRef> {
+    source.map(|source| FileRef {
+        source,
+        path: path.unwrap_or_default(),
+        rev,
+        fingerprint,
+    })
+}
+
+/// Expects columns in order: id, name, kind, cover_source, cover_path, cover_rev,
+/// cover_fingerprint, cover_style, updated_at. `track_ids` is left empty for the
+/// caller to fill in (it requires a separate query).
+fn project_from_row(row: &Row) -> rusqlite::Result<Project> {
+    let cover_source: Option<String> = row.get(3)?;
+    let cover_path: Option<String> = row.get(4)?;
+    let cover_rev: Option<String> = row.get(5)?;
+    let cover_fingerprint: Option<String> = row.get(6)?;
+    Ok(Project {
+        id: row.get(0)?,
+        name: row.get(1)?,
+        kind: row.get(2)?,
+        cover_image: file_ref_from_parts(cover_source, cover_path, cover_rev, cover_fingerprint),
+        cover_style: row.get(7)?,
+        track_ids: Vec::new(),
+        updated_at: row.get(8)?,
+    })
+}
+
+/// Expects columns in order: id, project_id, title, default_version_id, cover_source,
+/// cover_path, cover_rev, cover_fingerprint.
+fn track_from_row(row: &Row) -> rusqlite::Result<Track> {
+    let cover_source: Option<String> = row.get(4)?;
+    let cover_path: Option<String> = row.get(5)?;
+    let cover_rev: Option<String> = row.get(6)?;
+    let cover_fingerprint: Option<String> = row.get(7)?;
+    Ok(Track {
+        id: row.get(0)?,
+        project_id: row.get(1)?,
+        title: row.get(2)?,
+        default_version_id: row.get(3)?,
+        cover_image: file_ref_from_parts(cover_source, cover_path, cover_rev, cover_fingerprint),
+    })
+}
+
+/// Expects columns in order: id, track_id, label, file_source, file_path, file_rev,
+/// file_fingerprint, duration_seconds, bpm, key, peak_data_path, created_at.
+fn version_from_row(row: &Row) -> rusqlite::Result<Version> {
+    Ok(Version {
+        id: row.get(0)?,
+        track_id: row.get(1)?,
+        label: row.get(2)?,
+        file: FileRef {
+            source: row.get(3)?,
+            path: row.get(4)?,
+            rev: row.get(5)?,
+            fingerprint: row.get(6)?,
+        },
+        duration_seconds: row.get(7)?,
+        bpm: row.get(8)?,
+        key: row.get(9)?,
+        peak_data_path: row.get(10)?,
+        created_at: row.get(11)?,
+    })
+}
+
+fn track_ids_for_project(conn: &Connection, project_id: &str) -> Result<Vec<String>, String> {
+    let mut stmt = conn
+        .prepare("SELECT id FROM tracks WHERE project_id = ?1 ORDER BY sort_order")
+        .map_err(|e| e.to_string())?;
+    let result = stmt
+        .query_map(params![project_id], |row| row.get::<_, String>(0))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string());
+    result
+}
+
+fn tracks_for_project(conn: &Connection, project_id: &str) -> Result<Vec<Track>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, project_id, title, default_version_id, cover_source, cover_path, cover_rev, cover_fingerprint
+             FROM tracks WHERE project_id = ?1 ORDER BY sort_order",
+        )
+        .map_err(|e| e.to_string())?;
+    let result = stmt
+        .query_map(params![project_id], track_from_row)
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string());
+    result
+}
+
+fn versions_for_track(conn: &Connection, track_id: &str) -> Result<Vec<Version>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, track_id, label, file_source, file_path, file_rev, file_fingerprint, duration_seconds, bpm, key, peak_data_path, created_at
+             FROM versions WHERE track_id = ?1 ORDER BY created_at",
+        )
+        .map_err(|e| e.to_string())?;
+    let result = stmt
+        .query_map(params![track_id], version_from_row)
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string());
+    result
+}
+
+fn playlist_items_for(conn: &Connection, playlist_id: &str) -> Result<Vec<PlaylistItem>, String> {
+    let mut stmt = conn
+        .prepare("SELECT track_id, version_id FROM playlist_items WHERE playlist_id = ?1 ORDER BY sort_order")
+        .map_err(|e| e.to_string())?;
+    let result = stmt
+        .query_map(params![playlist_id], |row| {
+            Ok(PlaylistItem {
+                track_id: row.get(0)?,
+                version_id: row.get(1)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string());
+    result
+}
+
 // ---------- Projects ----------
 
 #[tauri::command]
 pub fn list_projects(state: State<DbState>) -> Result<Vec<Project>, String> {
-    let _ = state;
-    Ok(vec![])
+    let conn = state.0.lock();
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, name, kind, cover_source, cover_path, cover_rev, cover_fingerprint, cover_style, updated_at
+             FROM projects ORDER BY sort_order",
+        )
+        .map_err(|e| e.to_string())?;
+    let mut projects: Vec<Project> = stmt
+        .query_map([], project_from_row)
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(stmt);
+
+    for project in projects.iter_mut() {
+        project.track_ids = track_ids_for_project(&conn, &project.id)?;
+    }
+
+    Ok(projects)
 }
 
 #[tauri::command]
 pub fn create_project(state: State<DbState>, name: String, kind: String) -> Result<Project, String> {
-    let _ = (state, name, kind);
-    Err("not implemented".into())
+    let conn = state.0.lock();
+
+    let id = uuid::Uuid::new_v4().to_string();
+    let updated_at = chrono::Utc::now().to_rfc3339();
+    let cover_style = "individual".to_string();
+
+    let sort_order: i64 = conn
+        .query_row("SELECT COALESCE(MAX(sort_order), -1) + 1 FROM projects", [], |row| {
+            row.get(0)
+        })
+        .map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "INSERT INTO projects (id, name, kind, cover_style, sort_order, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![id, name, kind, cover_style, sort_order, updated_at],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(Project {
+        id,
+        name,
+        kind,
+        cover_image: None,
+        cover_style,
+        track_ids: Vec::new(),
+        updated_at,
+    })
 }
 
 #[tauri::command]
 pub fn set_project_cover_style(state: State<DbState>, project_id: String, style: String) -> Result<(), String> {
-    let _ = (state, project_id, style);
+    if style != "album" && style != "individual" {
+        return Err(format!("invalid cover style: {style}"));
+    }
+
+    let conn = state.0.lock();
+    conn.execute(
+        "UPDATE projects SET cover_style = ?1 WHERE id = ?2",
+        params![style, project_id],
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
 pub fn get_project_detail(state: State<DbState>, project_id: String) -> Result<ProjectDetail, String> {
-    let _ = (state, project_id);
-    Err("not implemented".into())
+    let conn = state.0.lock();
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, name, kind, cover_source, cover_path, cover_rev, cover_fingerprint, cover_style, updated_at
+             FROM projects WHERE id = ?1",
+        )
+        .map_err(|e| e.to_string())?;
+    let mut project = stmt
+        .query_row(params![project_id], project_from_row)
+        .map_err(|e| format!("project not found: {e}"))?;
+    drop(stmt);
+
+    let tracks = tracks_for_project(&conn, &project_id)?;
+    project.track_ids = tracks.iter().map(|t| t.id.clone()).collect();
+
+    let mut versions_by_track = HashMap::new();
+    for track in &tracks {
+        let versions = versions_for_track(&conn, &track.id)?;
+        versions_by_track.insert(track.id.clone(), versions);
+    }
+
+    Ok(ProjectDetail {
+        project,
+        tracks,
+        versions_by_track,
+    })
 }
 
 // ---------- Tracks & versions ----------
@@ -112,19 +320,96 @@ pub fn import_local_files(
     project_id: String,
     file_paths: Vec<String>,
 ) -> Result<Vec<Track>, String> {
-    let _ = (state, project_id, file_paths, waveform::probe_duration_seconds("".into()));
-    Ok(vec![])
+    let conn = state.0.lock();
+
+    let mut next_sort_order: i64 = conn
+        .query_row(
+            "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM tracks WHERE project_id = ?1",
+            params![project_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    let mut created_tracks = Vec::new();
+
+    for path in file_paths {
+        let title = std::path::Path::new(&path)
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| path.clone());
+
+        let duration_seconds = waveform::probe_duration_seconds(path.clone()).unwrap_or(0.0);
+
+        let fingerprint = std::fs::metadata(&path).ok().map(|meta| {
+            let mtime_secs = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            format!("{}:{}", meta.len(), mtime_secs)
+        });
+
+        let track_id = uuid::Uuid::new_v4().to_string();
+        let version_id = uuid::Uuid::new_v4().to_string();
+        let created_at = chrono::Utc::now().to_rfc3339();
+
+        conn.execute(
+            "INSERT INTO tracks (id, project_id, title, default_version_id, sort_order) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![track_id, project_id, title, version_id, next_sort_order],
+        )
+        .map_err(|e| e.to_string())?;
+
+        conn.execute(
+            "INSERT INTO versions (id, track_id, label, file_source, file_path, file_fingerprint, duration_seconds, created_at)
+             VALUES (?1, ?2, 'Original', 'local', ?3, ?4, ?5, ?6)",
+            params![version_id, track_id, path, fingerprint, duration_seconds, created_at],
+        )
+        .map_err(|e| e.to_string())?;
+
+        next_sort_order += 1;
+
+        created_tracks.push(Track {
+            id: track_id,
+            project_id: project_id.clone(),
+            title,
+            default_version_id: Some(version_id),
+            cover_image: None,
+        });
+    }
+
+    Ok(created_tracks)
 }
 
 #[tauri::command]
 pub fn list_versions(state: State<DbState>, track_id: String) -> Result<Vec<Version>, String> {
-    let _ = (state, track_id);
-    Ok(vec![])
+    let conn = state.0.lock();
+    versions_for_track(&conn, &track_id)
 }
 
 #[tauri::command]
 pub fn set_default_version(state: State<DbState>, track_id: String, version_id: String) -> Result<(), String> {
-    let _ = (state, track_id, version_id);
+    let conn = state.0.lock();
+
+    let belongs: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM versions WHERE id = ?1 AND track_id = ?2",
+            params![version_id, track_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    if belongs == 0 {
+        return Err(format!(
+            "version {version_id} does not belong to track {track_id}"
+        ));
+    }
+
+    conn.execute(
+        "UPDATE tracks SET default_version_id = ?1 WHERE id = ?2",
+        params![version_id, track_id],
+    )
+    .map_err(|e| e.to_string())?;
+
     Ok(())
 }
 
@@ -132,14 +417,54 @@ pub fn set_default_version(state: State<DbState>, track_id: String, version_id: 
 
 #[tauri::command]
 pub fn list_playlists(state: State<DbState>) -> Result<Vec<Playlist>, String> {
-    let _ = state;
-    Ok(vec![])
+    let conn = state.0.lock();
+
+    let mut stmt = conn
+        .prepare("SELECT id, name FROM playlists ORDER BY sort_order")
+        .map_err(|e| e.to_string())?;
+    let mut playlists: Vec<Playlist> = stmt
+        .query_map([], |row| {
+            Ok(Playlist {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                items: Vec::new(),
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(stmt);
+
+    for playlist in playlists.iter_mut() {
+        playlist.items = playlist_items_for(&conn, &playlist.id)?;
+    }
+
+    Ok(playlists)
 }
 
 #[tauri::command]
 pub fn create_playlist(state: State<DbState>, name: String) -> Result<Playlist, String> {
-    let _ = (state, name);
-    Err("not implemented".into())
+    let conn = state.0.lock();
+
+    let id = uuid::Uuid::new_v4().to_string();
+
+    let sort_order: i64 = conn
+        .query_row("SELECT COALESCE(MAX(sort_order), -1) + 1 FROM playlists", [], |row| {
+            row.get(0)
+        })
+        .map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "INSERT INTO playlists (id, name, sort_order) VALUES (?1, ?2, ?3)",
+        params![id, name, sort_order],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(Playlist {
+        id,
+        name,
+        items: Vec::new(),
+    })
 }
 
 #[tauri::command]
@@ -149,14 +474,44 @@ pub fn add_to_playlist(
     track_id: String,
     version_id: Option<String>,
 ) -> Result<(), String> {
-    let _ = (state, playlist_id, track_id, version_id);
+    let conn = state.0.lock();
+
+    let sort_order: i64 = conn
+        .query_row(
+            "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM playlist_items WHERE playlist_id = ?1",
+            params![playlist_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "INSERT INTO playlist_items (playlist_id, track_id, version_id, sort_order) VALUES (?1, ?2, ?3, ?4)",
+        params![playlist_id, track_id, version_id, sort_order],
+    )
+    .map_err(|e| e.to_string())?;
+
     Ok(())
 }
 
 #[tauri::command]
 pub fn list_favorites(state: State<DbState>) -> Result<Vec<Favorite>, String> {
-    let _ = state;
-    Ok(vec![])
+    let conn = state.0.lock();
+
+    let mut stmt = conn
+        .prepare("SELECT track_id, version_id, favorited_at FROM favorites ORDER BY favorited_at")
+        .map_err(|e| e.to_string())?;
+    let result = stmt
+        .query_map([], |row| {
+            Ok(Favorite {
+                track_id: row.get(0)?,
+                version_id: row.get(1)?,
+                favorited_at: row.get(2)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string());
+    result
 }
 
 #[tauri::command]
@@ -165,10 +520,30 @@ pub fn toggle_favorite(
     track_id: String,
     version_id: Option<String>,
 ) -> Result<bool, String> {
-    let _ = (state, track_id, version_id);
-    Ok(false)
-}
+    let conn = state.0.lock();
 
-// silence "unused" warnings for stub-only imports until real implementation lands
-#[allow(dead_code)]
-fn _unused(_: FileRef, _: HashMap<String, Vec<Version>>, _: PlaylistItem) {}
+    let exists: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM favorites WHERE track_id = ?1 AND version_id IS ?2",
+            params![track_id, version_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    if exists > 0 {
+        conn.execute(
+            "DELETE FROM favorites WHERE track_id = ?1 AND version_id IS ?2",
+            params![track_id, version_id],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(false)
+    } else {
+        let favorited_at = chrono::Utc::now().to_rfc3339();
+        conn.execute(
+            "INSERT INTO favorites (track_id, version_id, favorited_at) VALUES (?1, ?2, ?3)",
+            params![track_id, version_id, favorited_at],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(true)
+    }
+}
