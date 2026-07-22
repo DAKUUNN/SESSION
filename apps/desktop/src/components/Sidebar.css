@@ -5,8 +5,45 @@
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar__sections {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 14px 0 10px;
+}
+
+.sidebar__footer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  padding: 6px 10px;
+}
+
+.sidebar__settings {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.sidebar__settings:hover {
+  color: var(--accent);
+  background: var(--surface-2);
+}
+
+.sidebar__settings svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 .sidebar__section + .sidebar__section {

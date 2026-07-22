@@ -38,6 +38,19 @@ export interface PlaybackStatus {
   isPlaying: boolean;
 }
 
+export interface DropboxAccountInfo {
+  accountId: string;
+  email: string;
+  displayName: string;
+}
+
+export interface DropboxFileEntry {
+  name: string;
+  path: string;
+  rev: string;
+  size: number;
+}
+
 export const api = {
   listProjects: () => invoke<Project[]>("list_projects"),
 
@@ -92,4 +105,21 @@ export const api = {
   audioSetVolume: (volume: number) =>
     invoke<void>("audio_set_volume", { volume }),
   audioGetStatus: () => invoke<PlaybackStatus>("audio_get_status"),
+
+  dropboxConnect: () => invoke<DropboxAccountInfo>("dropbox_connect"),
+  dropboxGetConnection: () => invoke<DropboxAccountInfo | null>("dropbox_get_connection"),
+  dropboxDisconnect: () => invoke<void>("dropbox_disconnect"),
+  dropboxListAppFolder: () => invoke<DropboxFileEntry[]>("dropbox_list_app_folder"),
+  dropboxImportFile: (
+    projectId: string,
+    dropboxPath: string,
+    dropboxRev: string,
+    fileName: string,
+  ) =>
+    invoke<Track>("dropbox_import_file", {
+      projectId,
+      dropboxPath,
+      dropboxRev,
+      fileName,
+    }),
 };

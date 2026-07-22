@@ -12,6 +12,7 @@ import { PlayerBar } from "./components/PlayerBar";
 import { EmptyState } from "./components/EmptyState";
 import { NewProjectModal, type NewProjectModalResult } from "./components/NewProjectModal";
 import { ImportReviewModal } from "./components/ImportReviewModal";
+import { SettingsModal } from "./components/SettingsModal";
 import "./App.css";
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp"];
@@ -39,6 +40,9 @@ function App() {
 
   // Drag-dropped (or otherwise grouped) files awaiting review before import.
   const [pendingImportGroups, setPendingImportGroups] = useState<ImportGroup[] | null>(null);
+
+  // Settings modal (Dropbox connection + app-folder browsing/import).
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   const player = usePlayer();
 
@@ -298,6 +302,20 @@ function App() {
       .catch(() => {});
   }, []);
 
+  const handleOpenSettings = useCallback(() => setShowSettingsModal(true), []);
+  const handleCloseSettings = useCallback(() => setShowSettingsModal(false), []);
+
+  // After a Dropbox import lands in the currently-selected project, refresh
+  // its detail — same api.getProjectDetail + setProjectDetail pattern as
+  // handleConfirmImportReview above — so the new track shows up immediately.
+  const handleDropboxImported = useCallback(() => {
+    if (!selectedProjectId) return;
+    api
+      .getProjectDetail(selectedProjectId)
+      .then(setProjectDetail)
+      .catch(() => {});
+  }, [selectedProjectId]);
+
   const hasProjects = projects.length > 0;
 
   const mainContent = useMemo(() => {
@@ -352,6 +370,7 @@ function App() {
           selectedPlaylistId={selectedPlaylistId}
           onSelectPlaylist={setSelectedPlaylistId}
           onNewPlaylist={handleNewPlaylist}
+          onOpenSettings={handleOpenSettings}
         />
         {mainContent}
       </div>
@@ -380,6 +399,14 @@ function App() {
           busy={importBusy}
           onClose={handleCancelImportReview}
           onConfirm={handleConfirmImportReview}
+        />
+      ) : null}
+
+      {showSettingsModal ? (
+        <SettingsModal
+          onClose={handleCloseSettings}
+          selectedProjectId={selectedProjectId}
+          onImported={handleDropboxImported}
         />
       ) : null}
     </div>
