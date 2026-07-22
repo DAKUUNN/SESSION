@@ -70,6 +70,13 @@ pub fn init(app_data_dir: &std::path::Path) -> Result<Connection, String> {
             favorited_at TEXT NOT NULL,
             PRIMARY KEY (track_id, version_id)
         );
+        CREATE TABLE IF NOT EXISTS dropbox_connection (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            account_id TEXT NOT NULL,
+            email TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            connected_at TEXT NOT NULL
+        );
         ",
     )
     .map_err(|e| e.to_string())?;
@@ -205,6 +212,56 @@ fn playlist_items_for(conn: &Connection, playlist_id: &str) -> Result<Vec<Playli
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string());
     result
+}
+
+// ---------- Dropbox connection identity (no tokens here — see dropbox.rs) ----------
+//
+// This table stores only non-secret identity info (who's connected), so `get_project_detail`-style
+// reads never touch anything sensitive. The actual access/refresh tokens live exclusively in the
+// OS keychain, managed entirely by `dropbox.rs`.
+
+pub fn save_dropbox_connection(
+    conn: &Connection,
+    info: &crate::models::DropboxAccountInfo,
+) -> Result<(), String> {
+    let connected_at = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "INSERT OR REPLACE INTO dropbox_connection (id, account_id, email, display_name, connected_at)
+         VALUES (1, ?1, ?2, ?3, ?4)",
+        params![info.account_id, info.email, info.display_name, connected_at],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn get_dropbox_connection(
+    conn: &Connection,
+) -> Result<Option<crate::models::DropboxAccountInfo>, String> {
+    conn.query_row(
+        "SELECT account_id, email, display_name FROM dropbox_connection WHERE id = 1",
+        [],
+        |row| {
+            Ok(crate::models::DropboxAccountInfo {
+                account_id: row.get(0)?,
+                email: row.get(1)?,
+                display_name: row.get(2)?,
+            })
+        },
+    )
+    .map(Some)
+    .or_else(|e| {
+        if e == rusqlite::Error::QueryReturnedNoRows {
+            Ok(None)
+        } else {
+            Err(e.to_string())
+        }
+    })
+}
+
+pub fn clear_dropbox_connection(conn: &Connection) -> Result<(), String> {
+    conn.execute("DELETE FROM dropbox_connection WHERE id = 1", [])
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 // ---------- Projects ----------

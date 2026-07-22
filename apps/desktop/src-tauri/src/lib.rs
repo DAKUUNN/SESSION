@@ -1,5 +1,6 @@
 mod audio;
 mod db;
+mod dropbox;
 mod models;
 mod waveform;
 
@@ -17,6 +18,9 @@ pub fn run() {
             app.manage(db::DbState(parking_lot::Mutex::new(conn)));
             app.manage(audio::AudioState(parking_lot::Mutex::new(
                 audio::AudioPlayer::default(),
+            )));
+            app.manage(dropbox::DropboxState(parking_lot::Mutex::new(
+                dropbox::DropboxTokenCache::default(),
             )));
             audio::start_status_emitter(app.handle().clone());
             Ok(())
@@ -44,6 +48,11 @@ pub fn run() {
             audio::audio_seek,
             audio::audio_set_volume,
             audio::audio_get_status,
+            dropbox::dropbox_connect,
+            dropbox::dropbox_get_connection,
+            dropbox::dropbox_disconnect,
+            dropbox::dropbox_list_app_folder,
+            dropbox::dropbox_import_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

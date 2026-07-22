@@ -68,6 +68,24 @@ pub struct Favorite {
     pub favorited_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DropboxAccountInfo {
+    pub account_id: String,
+    pub email: String,
+    pub display_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DropboxFileEntry {
+    pub name: String,
+    /// Path within the app folder (Dropbox's scoped-app root), e.g. "/Bloodline/master_v3.wav".
+    pub path: String,
+    pub rev: String,
+    pub size: u64,
+}
+
 /// Full project detail bundle: the project plus its tracks and each track's versions,
 /// shaped so the frontend can render a project screen from one call.
 #[derive(Debug, Clone, Serialize, Deserialize)]
