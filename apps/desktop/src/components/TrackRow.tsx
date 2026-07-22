@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Track, Version } from "@session/shared-types";
 import { CoverThumb } from "./CoverThumb";
+import { EqualizerBars } from "./EqualizerBars";
 import { WaveformPlayer } from "./WaveformPlayer";
 import { HeartIcon, PauseIcon, PlayIcon, ShareIcon } from "./icons";
 import { formatDuration } from "../lib/format";
@@ -66,14 +67,31 @@ export function TrackRow({
         }}
       >
         {showNumber ? (
-          <div className={"track-leading track-leading--number" + (isActive ? " is-active" : "")}>
+          <div
+            className={
+              "track-leading track-leading--number" +
+              (isActive ? " is-active" : "") +
+              (isActive && isPlaying ? " is-playing" : "")
+            }
+          >
             <span className="track-num tabular">{index}</span>
+            {isActive && isPlaying ? (
+              <span className="track-leading__now-playing">
+                <EqualizerBars />
+              </span>
+            ) : null}
             <span className="track-leading__overlay">
               {isActive && isPlaying ? <PauseIcon /> : <PlayIcon />}
             </span>
           </div>
         ) : (
-          <div className={"track-leading track-leading--cover" + (isActive ? " is-active" : "")}>
+          <div
+            className={
+              "track-leading track-leading--cover" +
+              (isActive ? " is-active" : "") +
+              (isActive && isPlaying ? " is-playing" : "")
+            }
+          >
             <CoverThumb
               cover={track.coverImage}
               size={34}
@@ -84,9 +102,16 @@ export function TrackRow({
                 add-cover button underneath stays fully clickable — once a cover is set
                 the overlay returns, matching every other row's hover-to-play behavior. */}
             {track.coverImage?.path ? (
-              <span className="track-leading__overlay">
-                {isActive && isPlaying ? <PauseIcon /> : <PlayIcon />}
-              </span>
+              <>
+                {isActive && isPlaying ? (
+                  <span className="track-leading__now-playing">
+                    <EqualizerBars />
+                  </span>
+                ) : null}
+                <span className="track-leading__overlay">
+                  {isActive && isPlaying ? <PauseIcon /> : <PlayIcon />}
+                </span>
+              </>
             ) : null}
           </div>
         )}

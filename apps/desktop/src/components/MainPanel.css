@@ -103,16 +103,56 @@
 
 /* Album hero */
 .hero {
+  position: relative;
   display: flex;
   gap: 24px;
   padding: 28px 28px 20px;
+  overflow: hidden;
+  animation: hero-in 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes hero-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero {
+    animation: none;
+  }
+}
+
+.hero__glow {
+  /* sits behind the cover/info content, tinting the hero with the release's
+     own artwork instead of a flat panel — the "living room" ambient feel */
+  inset: -60% -20% -20% -20%;
 }
 
 .hero__cover {
+  position: relative;
+  z-index: 1;
   flex-shrink: 0;
 }
 
+.hero__cover .cover-thumb {
+  box-shadow: 0 16px 32px -12px rgba(0, 0, 0, 0.55);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
+}
+
+.hero__cover:hover .cover-thumb {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.6);
+}
+
 .hero__info {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -189,6 +229,8 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  transition: filter 0.15s ease, transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.2s ease;
 }
 
 .hero__play svg {
@@ -198,6 +240,12 @@
 
 .hero__play:hover {
   filter: brightness(1.08);
+  transform: scale(1.05);
+  box-shadow: 0 0 0 6px rgba(79, 215, 196, 0.14);
+}
+
+.hero__play:active {
+  transform: scale(0.95);
 }
 
 .hero__icon-btn svg {

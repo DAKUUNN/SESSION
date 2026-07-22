@@ -1,9 +1,13 @@
 .track-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 7px 20px;
   cursor: pointer;
+  /* inset shadow instead of a real border, so the accent stripe never shifts layout */
+  box-shadow: inset 2px 0 0 0 transparent;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .track-row:hover {
@@ -12,6 +16,7 @@
 
 .track-row.is-active {
   background: var(--surface-2);
+  box-shadow: inset 2px 0 0 0 var(--accent);
 }
 
 .track-leading {
@@ -30,6 +35,10 @@
 .track-leading--cover {
   width: 34px;
   height: 34px;
+}
+
+.track-row:hover .track-leading--cover .cover-thumb {
+  transform: scale(1.08);
 }
 
 .track-num {
@@ -61,8 +70,33 @@
   height: 13px;
 }
 
+.track-leading__now-playing {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.track-leading--cover .track-leading__now-playing {
+  background: rgba(6, 16, 15, 0.6);
+  border-radius: var(--radius-sm);
+}
+
+/* At rest: a playing row shows the animated equalizer bars; hovering swaps
+   it for the clickable pause icon (Spotify's "now playing vs. control" swap). */
+.track-leading.is-playing .track-leading__now-playing {
+  opacity: 1;
+}
+
+.track-row:hover .track-leading__now-playing {
+  opacity: 0;
+}
+
 .track-row:hover .track-leading__overlay,
-.track-leading.is-active .track-leading__overlay {
+.track-leading.is-active:not(.is-playing) .track-leading__overlay {
   opacity: 1;
 }
 

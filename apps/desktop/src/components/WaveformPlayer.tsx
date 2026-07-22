@@ -169,7 +169,11 @@ export function WaveformPlayer({
             return (
               <div
                 key={i}
-                className={"waveform__bar" + (i < playedBucket ? " is-played" : "")}
+                className={
+                  "waveform__bar" +
+                  (i < playedBucket ? " is-played" : "") +
+                  (i === playedBucket ? " is-current" : "")
+                }
               >
                 <span style={{ height: `${heightPct}%` }} />
               </div>

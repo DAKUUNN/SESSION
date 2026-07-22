@@ -1,4 +1,5 @@
 import { useCallback, useRef } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import type { FileRef } from "@session/shared-types";
 import { CoverThumb } from "./CoverThumb";
 import { PauseIcon, PlayIcon, VolumeIcon, VolumeMuteIcon } from "./icons";
@@ -49,6 +50,7 @@ function DragBar({
     >
       <div className={trackClassName}>
         <div className={fillClassName} style={{ width: `${ratio * 100}%` }} />
+        <div className="drag-bar__thumb" style={{ left: `${ratio * 100}%` }} />
       </div>
     </div>
   );
@@ -78,6 +80,12 @@ export function PlayerBar({
 
   return (
     <footer className="player-bar">
+      {cover?.path ? (
+        <div
+          className="player-bar__glow ambient-glow"
+          style={{ backgroundImage: `url(${convertFileSrc(cover.path)})` }}
+        />
+      ) : null}
       <div className="player-bar__transport">
         <button
           className="player-bar__play"

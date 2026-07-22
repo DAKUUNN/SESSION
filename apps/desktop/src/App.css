@@ -67,12 +67,23 @@ button:disabled {
   border-radius: var(--radius-sm);
   color: var(--text-dim);
   background: transparent;
-  transition: border-color 0.12s ease, color 0.12s ease, background-color 0.12s ease;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease,
+    transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .icon-btn:hover:not(:disabled) {
   border-color: var(--text-dim);
   color: var(--text);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .icon-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+
+  .icon-btn:active:not(:disabled) {
+    transform: scale(0.92);
+  }
 }
 
 .icon-btn.is-active {
@@ -87,6 +98,11 @@ button:disabled {
   font-size: 12.5px;
   font-weight: 600;
   border: 1px solid transparent;
+}
+
+.btn {
+  transition: filter 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+    transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .btn--primary {
@@ -107,6 +123,27 @@ button:disabled {
 .btn--secondary:hover:not(:disabled) {
   border-color: var(--text-dim);
   color: var(--text);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .btn:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+}
+
+/* Reusable ambient glow: a heavily blurred, dimmed copy of an image placed
+   behind a hero/player surface — the "living room" warmth of a color that
+   matches what's actually playing, instead of a flat panel. */
+.ambient-glow {
+  position: absolute;
+  inset: -40%;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  filter: blur(60px) saturate(1.6) brightness(0.9);
+  opacity: 0.35;
+  pointer-events: none;
+  transition: opacity 0.6s ease;
 }
 
 /* Text inputs shared by modals */

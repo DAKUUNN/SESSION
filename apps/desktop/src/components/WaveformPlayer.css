@@ -33,11 +33,16 @@
   border-radius: 1px;
   background: var(--text-faint);
   opacity: 0.55;
+  transition: background-color 0.12s ease, opacity 0.12s ease, box-shadow 0.15s ease;
 }
 
 .waveform__bar.is-played span {
   background: var(--accent);
   opacity: 1;
+}
+
+.waveform__bar.is-current span {
+  box-shadow: 0 0 8px 1px rgba(79, 215, 196, 0.7);
 }
 
 .waveform__loading {

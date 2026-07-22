@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import type { CoverStyle, Project, Track, Version } from "@session/shared-types";
 import { CoverThumb } from "./CoverThumb";
 import { TrackRow } from "./TrackRow";
@@ -167,7 +168,13 @@ export function MainPanel({
 
       <div className="main-panel__scroll">
         {project.coverStyle === "album" ? (
-          <div className="hero">
+          <div className="hero" key={project.id}>
+            {project.coverImage?.path ? (
+              <div
+                className="hero__glow ambient-glow"
+                style={{ backgroundImage: `url(${convertFileSrc(project.coverImage.path)})` }}
+              />
+            ) : null}
             <div className="hero__cover">
               <CoverThumb
                 cover={project.coverImage}
