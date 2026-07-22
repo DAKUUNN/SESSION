@@ -279,6 +279,55 @@ pub fn set_project_cover_style(state: State<DbState>, project_id: String, style:
     Ok(())
 }
 
+/// Computes a fingerprint string ("{size}:{mtime_secs}") for a local file, used to
+/// detect when a re-linked/re-imported file has actually changed. `None` if the
+/// file's metadata can't be read (kept as a soft failure, mirroring `import_local_files`).
+fn local_fingerprint(path: &str) -> Option<String> {
+    std::fs::metadata(path).ok().map(|meta| {
+        let mtime_secs = meta
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        format!("{}:{}", meta.len(), mtime_secs)
+    })
+}
+
+#[tauri::command]
+pub fn set_project_cover_image(
+    state: State<DbState>,
+    project_id: String,
+    source: String,
+    path: String,
+) -> Result<(), String> {
+    let conn = state.0.lock();
+    let fingerprint = local_fingerprint(&path);
+    conn.execute(
+        "UPDATE projects SET cover_source = ?1, cover_path = ?2, cover_fingerprint = ?3 WHERE id = ?4",
+        params![source, path, fingerprint, project_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_track_cover_image(
+    state: State<DbState>,
+    track_id: String,
+    source: String,
+    path: String,
+) -> Result<(), String> {
+    let conn = state.0.lock();
+    let fingerprint = local_fingerprint(&path);
+    conn.execute(
+        "UPDATE tracks SET cover_source = ?1, cover_path = ?2, cover_fingerprint = ?3 WHERE id = ?4",
+        params![source, path, fingerprint, track_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn get_project_detail(state: State<DbState>, project_id: String) -> Result<ProjectDetail, String> {
     let conn = state.0.lock();
@@ -373,6 +422,107 @@ pub fn import_local_files(
             project_id: project_id.clone(),
             title,
             default_version_id: Some(version_id),
+            cover_image: None,
+        });
+    }
+
+    Ok(created_tracks)
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportVersionInput {
+    pub label: String,
+    pub path: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportGroupInput {
+    pub title: String,
+    pub versions: Vec<ImportVersionInput>,
+    /// Index into `versions` that should become the track's default (master) version.
+    pub default_version_index: usize,
+}
+
+/// Imports drag-and-dropped files that have already been grouped client-side (e.g. by
+/// the filename-based "Track master v1/v2/v3" heuristic) into one Track per group, with
+/// one Version per file in that group. Complements `import_local_files`, which always
+/// creates a separate track per file — this is what the drag & drop flow uses instead.
+#[tauri::command]
+pub fn import_grouped_files(
+    state: State<DbState>,
+    project_id: String,
+    groups: Vec<ImportGroupInput>,
+) -> Result<Vec<Track>, String> {
+    let conn = state.0.lock();
+
+    let mut next_sort_order: i64 = conn
+        .query_row(
+            "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM tracks WHERE project_id = ?1",
+            params![project_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    let mut created_tracks = Vec::new();
+
+    for group in groups {
+        if group.versions.is_empty() {
+            continue;
+        }
+        let default_index = group.default_version_index.min(group.versions.len() - 1);
+
+        let track_id = uuid::Uuid::new_v4().to_string();
+        let mut default_version_id: Option<String> = None;
+
+        // Insert the track first with no default yet — versions reference it via FK,
+        // and we only know the default version's id once we've created it below.
+        conn.execute(
+            "INSERT INTO tracks (id, project_id, title, sort_order) VALUES (?1, ?2, ?3, ?4)",
+            params![track_id, project_id, group.title, next_sort_order],
+        )
+        .map_err(|e| e.to_string())?;
+
+        for (i, version_input) in group.versions.into_iter().enumerate() {
+            let version_id = uuid::Uuid::new_v4().to_string();
+            let created_at = chrono::Utc::now().to_rfc3339();
+            let duration_seconds =
+                waveform::probe_duration_seconds(version_input.path.clone()).unwrap_or(0.0);
+            let fingerprint = local_fingerprint(&version_input.path);
+
+            conn.execute(
+                "INSERT INTO versions (id, track_id, label, file_source, file_path, file_fingerprint, duration_seconds, created_at)
+                 VALUES (?1, ?2, ?3, 'local', ?4, ?5, ?6, ?7)",
+                params![
+                    version_id,
+                    track_id,
+                    version_input.label,
+                    version_input.path,
+                    fingerprint,
+                    duration_seconds,
+                    created_at
+                ],
+            )
+            .map_err(|e| e.to_string())?;
+
+            if i == default_index {
+                default_version_id = Some(version_id);
+            }
+        }
+
+        conn.execute(
+            "UPDATE tracks SET default_version_id = ?1 WHERE id = ?2",
+            params![default_version_id, track_id],
+        )
+        .map_err(|e| e.to_string())?;
+
+        next_sort_order += 1;
+
+        created_tracks.push(Track {
+            id: track_id,
+            project_id: project_id.clone(),
+            title: group.title,
+            default_version_id,
             cover_image: None,
         });
     }
