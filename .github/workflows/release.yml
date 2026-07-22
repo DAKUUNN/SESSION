@@ -36,8 +36,16 @@ jobs:
       # Root-level install: this is an npm-workspaces monorepo, so apps/desktop's
       # dependencies (including the @session/shared-types and @session/design-tokens
       # workspace packages it imports) only resolve correctly from the repo root.
+      #
+      # `npm install` rather than `npm ci`: this repo's package-lock.json was
+      # generated on macOS, and `npm ci` trusts the lockfile's optionalDependencies
+      # resolution as-is instead of re-resolving for the current platform — a
+      # known npm bug (npmc/cli#4828) that's more prone to trigger in npm
+      # workspaces. It surfaces as the Windows build failing to find
+      # @tauri-apps/cli-win32-x64-msvc's native binary. `npm install` re-resolves
+      # optional platform packages for whichever OS is actually running.
       - name: Install dependencies
-        run: npm ci --include=dev
+        run: npm install --include=dev
 
       - name: Install Tauri CLI globally
         run: npm install -g @tauri-apps/cli@^2
