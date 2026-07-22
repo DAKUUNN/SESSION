@@ -42,7 +42,7 @@
 }
 
 .waveform__bar.is-current span {
-  box-shadow: 0 0 8px 1px rgba(79, 215, 196, 0.7);
+  box-shadow: 0 0 8px 1px color-mix(in srgb, var(--accent) 70%, transparent);
 }
 
 .waveform__loading {

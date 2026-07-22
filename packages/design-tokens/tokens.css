@@ -1,71 +1,92 @@
-/* Session — "Signal" design tokens.
-   Chosen direction: precise, a little clinical, ink-blue-black ground with a
-   phosphor-teal trace color. Single deliberate visual world, not a light/dark pair. */
+/* Session — "Aurora" design tokens.
+   v2 direction, replacing "Signal": the brief was explicit — move away from
+   the blue-black/monospace technical look entirely and read as a genuine
+   consumer streaming app (Spotify/Apple Music energy), bold and warm rather
+   than precise and clinical. Warm near-black ground (not blue), a vivid
+   coral-orange accent (deliberately not blue/teal), a confident geometric
+   display face, soft rounded shapes throughout, and monospace dropped from
+   the UI entirely — numeric alignment comes from tabular-nums on the body
+   face instead of a separate mono family. */
 
 @font-face {
-  font-family: "Archivo";
+  font-family: "Poppins";
   font-style: normal;
-  font-weight: 400;
+  font-weight: 600;
   font-display: swap;
-  src: url("./fonts/archivo-400.woff2") format("woff2");
+  src: url("./fonts/poppins-600.woff2") format("woff2");
 }
 @font-face {
-  font-family: "Archivo";
+  font-family: "Poppins";
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url("./fonts/archivo-700.woff2") format("woff2");
+  src: url("./fonts/poppins-700.woff2") format("woff2");
 }
 @font-face {
-  font-family: "Public Sans";
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("./fonts/poppins-800.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Plus Jakarta Sans";
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url("./fonts/public-sans-400.woff2") format("woff2");
+  src: url("./fonts/jakarta-400.woff2") format("woff2");
 }
 @font-face {
-  font-family: "Public Sans";
+  font-family: "Plus Jakarta Sans";
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url("./fonts/public-sans-500.woff2") format("woff2");
+  src: url("./fonts/jakarta-500.woff2") format("woff2");
 }
 @font-face {
-  font-family: "JetBrains Mono";
+  font-family: "Plus Jakarta Sans";
   font-style: normal;
-  font-weight: 400;
+  font-weight: 600;
   font-display: swap;
-  src: url("./fonts/jetbrains-mono-400.woff2") format("woff2");
+  src: url("./fonts/jakarta-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./fonts/jakarta-700.woff2") format("woff2");
 }
 
 :root {
-  /* surfaces */
-  --bg: #0c1016;
-  --surface: #121821;
-  --surface-2: #182029;
-  --raised: #1e2731;
+  /* surfaces — warm near-black, NOT blue-tinted */
+  --bg: #0b0b0d;
+  --surface: #161618;
+  --surface-2: #212124;
+  --raised: #2a2a2e;
 
   /* borders */
-  --border: #26313d;
-  --border-soft: #1c2530;
+  --border: #2f2f33;
+  --border-soft: #1e1e21;
 
   /* text */
-  --text: #e7edf2;
-  --text-dim: #8695a3;
-  --text-faint: #7c8996;
+  --text: #f7f6f5;
+  --text-dim: #a9a8ac;
+  --text-faint: #75747a;
 
-  /* accent */
-  --accent: #4fd7c4;
-  --accent-ink: #06110f;
-  --accent-2: #f2a33e;
+  /* accent — vivid coral-orange, the whole point being "not blue" */
+  --accent: #ff5c3a;
+  --accent-ink: #200a04;
+  /* secondary accent for feedback markers / warnings — warm gold, still non-blue */
+  --accent-2: #ffbc3d;
 
-  /* type */
-  --font-display: "Archivo", sans-serif;
-  --font-body: "Public Sans", sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
+  /* type — bold geometric display, warm humanist body, no monospace in the UI */
+  --font-display: "Poppins", sans-serif;
+  --font-body: "Plus Jakarta Sans", sans-serif;
+  --font-mono: "Plus Jakarta Sans", sans-serif;
 
-  /* shape */
-  --radius-sm: 2px;
-  --radius-md: 2px;
-  --radius-pill: 2px;
+  /* shape — soft and chunky, the opposite of Signal's sharp corners */
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-pill: 999px;
 }

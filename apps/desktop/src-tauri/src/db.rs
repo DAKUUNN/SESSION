@@ -1,9 +1,12 @@
-use crate::models::{FileRef, Favorite, Playlist, PlaylistItem, Project, ProjectDetail, Track, Version};
+use crate::models::{
+    FileRef, Favorite, Playlist, PlaylistItem, PlaylistTrackEntry, Project, ProjectDetail, Track,
+    Version,
+};
 use crate::waveform;
 use parking_lot::Mutex;
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use std::collections::HashMap;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 pub struct DbState(pub Mutex<Connection>);
 
@@ -76,6 +79,10 @@ pub fn init(app_data_dir: &std::path::Path) -> Result<Connection, String> {
             email TEXT NOT NULL,
             display_name TEXT NOT NULL,
             connected_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS app_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            download_dir TEXT
         );
         ",
     )
@@ -804,6 +811,261 @@ pub fn add_to_playlist(
     .map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+#[tauri::command]
+pub fn remove_from_playlist(
+    state: State<DbState>,
+    playlist_id: String,
+    track_id: String,
+    version_id: Option<String>,
+) -> Result<(), String> {
+    let conn = state.0.lock();
+    conn.execute(
+        "DELETE FROM playlist_items WHERE playlist_id = ?1 AND track_id = ?2 AND version_id IS ?3",
+        params![playlist_id, track_id, version_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_playlist(state: State<DbState>, playlist_id: String) -> Result<(), String> {
+    let conn = state.0.lock();
+    // Deleted explicitly rather than relying on the `ON DELETE CASCADE` FK, since
+    // rusqlite/SQLite only enforces that when `PRAGMA foreign_keys = ON` has been
+    // set on the connection, which this app doesn't currently do.
+    conn.execute(
+        "DELETE FROM playlist_items WHERE playlist_id = ?1",
+        params![playlist_id],
+    )
+    .map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM playlists WHERE id = ?1", params![playlist_id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn rename_playlist(state: State<DbState>, playlist_id: String, name: String) -> Result<(), String> {
+    let conn = state.0.lock();
+    conn.execute(
+        "UPDATE playlists SET name = ?1 WHERE id = ?2",
+        params![name, playlist_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Resolves one (track_id, pinned_version_id) pair into a full `PlaylistTrackEntry`
+/// (track + version + owning project's identity/cover). Used by both real playlists
+/// and the pinned Favorites pseudo-playlist, since both are flat, cross-project track
+/// lists. Returns `Ok(None)` rather than an error if the track no longer exists (e.g.
+/// a stale playlist/favorite entry left behind — there's no track deletion command yet,
+/// but tolerating this is cheap and matches this codebase's soft-failure style).
+fn resolve_playlist_entry(
+    conn: &Connection,
+    track_id: &str,
+    pinned_version_id: Option<&str>,
+) -> Result<Option<PlaylistTrackEntry>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, project_id, title, default_version_id, cover_source, cover_path, cover_rev, cover_fingerprint
+             FROM tracks WHERE id = ?1",
+        )
+        .map_err(|e| e.to_string())?;
+    let track = match stmt.query_row(params![track_id], track_from_row) {
+        Ok(t) => t,
+        Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(None),
+        Err(e) => return Err(e.to_string()),
+    };
+    drop(stmt);
+
+    let version_id = pinned_version_id
+        .map(|s| s.to_string())
+        .or_else(|| track.default_version_id.clone());
+    let version = match version_id {
+        Some(vid) => get_version(conn, &vid).ok(),
+        None => None,
+    };
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT name, cover_source, cover_path, cover_rev, cover_fingerprint FROM projects WHERE id = ?1",
+        )
+        .map_err(|e| e.to_string())?;
+    let (project_name, project_cover) = match stmt.query_row(params![track.project_id], |row| {
+        let name: String = row.get(0)?;
+        let cover_source: Option<String> = row.get(1)?;
+        let cover_path: Option<String> = row.get(2)?;
+        let cover_rev: Option<String> = row.get(3)?;
+        let cover_fingerprint: Option<String> = row.get(4)?;
+        Ok((name, file_ref_from_parts(cover_source, cover_path, cover_rev, cover_fingerprint)))
+    }) {
+        Ok(v) => v,
+        Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(None),
+        Err(e) => return Err(e.to_string()),
+    };
+
+    Ok(Some(PlaylistTrackEntry {
+        project_id: track.project_id.clone(),
+        project_name,
+        project_cover,
+        track,
+        version,
+    }))
+}
+
+#[tauri::command]
+pub fn get_playlist_detail(
+    state: State<DbState>,
+    playlist_id: String,
+) -> Result<Vec<PlaylistTrackEntry>, String> {
+    let conn = state.0.lock();
+    let items = playlist_items_for(&conn, &playlist_id)?;
+    let mut entries = Vec::with_capacity(items.len());
+    for item in items {
+        if let Some(entry) = resolve_playlist_entry(&conn, &item.track_id, item.version_id.as_deref())? {
+            entries.push(entry);
+        }
+    }
+    Ok(entries)
+}
+
+#[tauri::command]
+pub fn list_favorite_tracks(state: State<DbState>) -> Result<Vec<PlaylistTrackEntry>, String> {
+    let conn = state.0.lock();
+
+    let mut stmt = conn
+        .prepare("SELECT track_id, version_id FROM favorites ORDER BY favorited_at DESC")
+        .map_err(|e| e.to_string())?;
+    let favorites: Vec<(String, Option<String>)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(stmt);
+
+    let mut entries = Vec::with_capacity(favorites.len());
+    for (track_id, version_id) in favorites {
+        if let Some(entry) = resolve_playlist_entry(&conn, &track_id, version_id.as_deref())? {
+            entries.push(entry);
+        }
+    }
+    Ok(entries)
+}
+
+// ---------- Storage settings & local downloads ----------
+
+/// Reads the configured download directory, or computes+persists the default
+/// (`<audio dir>/Session Downloads`) the first time nothing has been configured
+/// yet, so it stays stable across restarts until the user picks something else.
+/// Shared by the `get_download_dir` command and `download_version`, both of
+/// which already hold the DB lock — takes `&Connection` rather than `State` so
+/// neither has to re-lock (or rely on `State` being `Clone`).
+fn resolve_download_dir(conn: &Connection, app_handle: &AppHandle) -> Result<String, String> {
+    let existing: Option<String> = conn
+        .query_row("SELECT download_dir FROM app_settings WHERE id = 1", [], |row| {
+            row.get::<_, Option<String>>(0)
+        })
+        .optional()
+        .map_err(|e| e.to_string())?
+        .flatten();
+    if let Some(dir) = existing {
+        return Ok(dir);
+    }
+
+    let default_dir = app_handle
+        .path()
+        .audio_dir()
+        .map_err(|e| format!("could not resolve the audio directory: {e}"))?
+        .join("Session Downloads");
+    std::fs::create_dir_all(&default_dir)
+        .map_err(|e| format!("failed to create the default download directory: {e}"))?;
+    let default_dir_str = default_dir.to_string_lossy().into_owned();
+
+    conn.execute(
+        "INSERT OR REPLACE INTO app_settings (id, download_dir) VALUES (1, ?1)",
+        params![default_dir_str],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(default_dir_str)
+}
+
+#[tauri::command]
+pub fn get_download_dir(state: State<DbState>, app_handle: AppHandle) -> Result<String, String> {
+    let conn = state.0.lock();
+    resolve_download_dir(&conn, &app_handle)
+}
+
+#[tauri::command]
+pub fn set_download_dir(state: State<DbState>, path: String) -> Result<(), String> {
+    std::fs::create_dir_all(&path).map_err(|e| format!("can't use that folder: {e}"))?;
+    let conn = state.0.lock();
+    conn.execute(
+        "INSERT OR REPLACE INTO app_settings (id, download_dir) VALUES (1, ?1)",
+        params![path],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Copies a version's audio file into the configured download directory and flips
+/// it to a `"local"`-sourced file living there. Meaningful for `"dropbox"`-sourced
+/// versions (whose file currently lives in the hidden, app-internal `dropbox_cache`
+/// directory — see `dropbox.rs` — which is a fine transient cache but not something
+/// the user can see or rely on surviving a future cache-eviction policy). Already-
+/// local versions are returned unchanged rather than erroring, so the frontend can
+/// call this unconditionally without checking `file.source` first.
+#[tauri::command]
+pub fn download_version(
+    state: State<DbState>,
+    app_handle: AppHandle,
+    version_id: String,
+) -> Result<Version, String> {
+    let conn = state.0.lock();
+    let version = get_version(&conn, &version_id)?;
+    if version.file.source == "local" {
+        return Ok(version);
+    }
+
+    let title: String = conn
+        .query_row(
+            "SELECT title FROM tracks WHERE id = ?1",
+            params![version.track_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let download_dir = resolve_download_dir(&conn, &app_handle)?;
+
+    let ext = std::path::Path::new(&version.file.path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("dat");
+    let safe_title: String = title
+        .chars()
+        .map(|c| if "/\\:*?\"<>|".contains(c) { '_' } else { c })
+        .collect();
+    let file_name = if version.label.eq_ignore_ascii_case("original") {
+        format!("{safe_title}.{ext}")
+    } else {
+        format!("{safe_title} ({}).{ext}", version.label)
+    };
+    let dest_path = std::path::Path::new(&download_dir).join(file_name);
+
+    std::fs::copy(&version.file.path, &dest_path)
+        .map_err(|e| format!("failed to download '{}': {e}", title))?;
+    let dest_path_str = dest_path.to_string_lossy().into_owned();
+    let fingerprint = local_fingerprint(&dest_path_str);
+
+    conn.execute(
+        "UPDATE versions SET file_source = 'local', file_path = ?1, file_fingerprint = ?2 WHERE id = ?3",
+        params![dest_path_str, fingerprint, version_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    get_version(&conn, &version_id)
 }
 
 #[tauri::command]

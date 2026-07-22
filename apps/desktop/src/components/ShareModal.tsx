@@ -5,6 +5,7 @@ import {
   createShareLink,
   listShareLinks,
   revokeShareLink,
+  shareUrlFor,
   storeDropboxToken,
   type ShareLinkSummary,
 } from "../lib/sharing";
@@ -62,7 +63,14 @@ export function ShareModal({
     if (!user) return;
     listShareLinks(user.uid, version.id)
       .then(setLinks)
-      .catch(() => setLinks([]));
+      .catch((err) => {
+        // Surfaced rather than swallowed: a link can be created successfully
+        // (see the optimistic prepend in handleCreate) even if this refresh
+        // itself fails, so silently clearing the list would hide a real
+        // problem behind what looks like "nothing happened."
+        setLinks((prev) => prev ?? []);
+        setError(errorMessage(err));
+      });
   }, [user, version.id]);
 
   useEffect(() => {
@@ -97,7 +105,7 @@ export function ShareModal({
       //    instantly without touching the audio file.
       setBusyLabel("Creating the link…");
       const peaks = await api.generatePeaks(version.file.path, PEAK_BUCKETS).catch(() => []);
-      await createShareLink({
+      const token = await createShareLink({
         trackTitle: track.title,
         versionId: version.id,
         versionLabel: version.label,
@@ -105,6 +113,14 @@ export function ShareModal({
         durationSeconds: version.durationSeconds,
         peaks,
       });
+      // Show the new link immediately from the create response, rather than
+      // waiting on a follow-up Firestore read that could lag or fail —
+      // that's what made a successfully-created link look like it never
+      // appeared at all.
+      setLinks((prev) => [
+        { token, url: shareUrlFor(token), versionLabel: version.label, revoked: false, viewCount: 0 },
+        ...(prev ?? []),
+      ]);
       refreshLinks();
     } catch (err) {
       setError(errorMessage(err));

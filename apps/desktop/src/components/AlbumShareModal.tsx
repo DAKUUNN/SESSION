@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Project, Track, Version } from "@session/shared-types";
 import { api } from "../lib/api";
 import {
+  albumShareUrlFor,
   createAlbumShareLink,
   listAlbumShareLinks,
   revokeAlbumShareLink,
@@ -70,7 +71,14 @@ export function AlbumShareModal({
     if (!user) return;
     listAlbumShareLinks(user.uid)
       .then(setLinks)
-      .catch(() => setLinks([]));
+      .catch((err) => {
+        // Surfaced rather than swallowed: a link can be created successfully
+        // (see the optimistic prepend in handleCreate) even if this refresh
+        // itself fails, so silently clearing the list would hide a real
+        // problem behind what looks like "nothing happened."
+        setLinks((prev) => prev ?? []);
+        setError(errorMessage(err));
+      });
   }, [user]);
 
   useEffect(() => {
@@ -134,11 +142,19 @@ export function AlbumShareModal({
       await storeDropboxToken(refreshToken);
 
       setBusyLabel("Creating the link…");
-      await createAlbumShareLink({
+      const token = await createAlbumShareLink({
         projectName: project.name,
         projectKind: project.kind,
         tracks: trackInputs,
       });
+      // Show the new link immediately from the create response, rather than
+      // waiting on a follow-up Firestore read that could lag or fail —
+      // that's what made a successfully-created link look like it never
+      // appeared at all.
+      setLinks((prev) => [
+        { token, url: albumShareUrlFor(token), projectName: project.name, revoked: false, viewCount: 0 },
+        ...(prev ?? []),
+      ]);
       refreshLinks();
     } catch (err) {
       setError(errorMessage(err));

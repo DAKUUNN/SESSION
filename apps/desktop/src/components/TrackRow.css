@@ -16,7 +16,12 @@
 
 .track-row.is-active {
   background: var(--surface-2);
-  box-shadow: inset 2px 0 0 0 var(--accent);
+  box-shadow: inset 3px 0 0 0 var(--accent);
+}
+
+.track-row.is-active .track-row__title {
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .track-leading {
@@ -131,28 +136,20 @@
 
 .version-chip {
   flex-shrink: 0;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 10.5px;
+  letter-spacing: 0.01em;
   color: var(--text-dim);
-  border: 1px solid var(--border);
-  padding: 1px 5px;
-  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
   white-space: nowrap;
 }
 
-.version-chip::before {
-  content: "[";
-}
-
-.version-chip::after {
-  content: "]";
-}
-
 .version-chip.is-default {
-  color: var(--accent);
-  border-color: var(--accent);
+  color: var(--accent-ink);
+  background: var(--accent);
 }
 
 .version-chip.is-switchable {
@@ -250,6 +247,38 @@
 .favorite-btn svg {
   width: 15px;
   height: 15px;
+}
+
+.playlist-add-menu {
+  min-width: 160px;
+}
+
+.playlist-add-menu__empty {
+  padding: 6px 8px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.playlist-add-menu__new {
+  border-top: 1px solid var(--border-soft);
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+.playlist-add-menu__input {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 11.5px;
+  font-family: var(--font-body);
+  color: var(--text);
+  background: transparent;
+  border-radius: var(--radius-sm);
+}
+
+.playlist-add-menu__input:focus {
+  outline: none;
+  background: var(--surface-2);
 }
 
 .track-row-expanded {

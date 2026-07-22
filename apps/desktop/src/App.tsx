@@ -1,17 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { CoverStyle, Playlist, Project, Track, Version } from "@session/shared-types";
+import type { Playlist, PlaylistTrackEntry, Project, Track, Version } from "@session/shared-types";
 import { api, type ProjectDetail } from "./lib/api";
 import { groupFilesByBaseName } from "./lib/grouping";
 import type { ImportGroup } from "./lib/grouping";
+import { FAVORITES_PLAYLIST_ID } from "./lib/constants";
 import { usePlayer } from "./hooks/usePlayer";
 import { useAccount } from "./hooks/useAccount";
+import {
+  isAdaptiveAccentEnabled,
+  persistAdaptiveAccentEnabled,
+  useAdaptiveAccent,
+} from "./hooks/useAdaptiveAccent";
 import { Titlebar } from "./components/Titlebar";
 import { Sidebar } from "./components/Sidebar";
 import { MainPanel } from "./components/MainPanel";
+import { PlaylistView } from "./components/PlaylistView";
 import { PlayerBar } from "./components/PlayerBar";
 import { EmptyState } from "./components/EmptyState";
 import { NewProjectModal, type NewProjectModalResult } from "./components/NewProjectModal";
+import { NewPlaylistModal } from "./components/NewPlaylistModal";
 import { ImportReviewModal } from "./components/ImportReviewModal";
 import { SettingsModal } from "./components/SettingsModal";
 import { ShareModal } from "./components/ShareModal";
@@ -32,9 +40,19 @@ function App() {
 
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
+  const [playlistEntries, setPlaylistEntries] = useState<PlaylistTrackEntry[]>([]);
 
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [importBusy, setImportBusy] = useState(false);
+  const [downloadingVersionId, setDownloadingVersionId] = useState<string | null>(null);
+
+  // Experimental "match accent color to cover art" appearance toggle — a
+  // local-only UI preference (not synced anywhere), see useAdaptiveAccent.
+  const [adaptiveAccentEnabled, setAdaptiveAccentEnabledState] = useState(isAdaptiveAccentEnabled);
+  const handleToggleAdaptiveAccent = useCallback((enabled: boolean) => {
+    setAdaptiveAccentEnabledState(enabled);
+    persistAdaptiveAccentEnabled(enabled);
+  }, []);
 
   // New/Edit Project modal — same surface for both flows (see NewProjectModal).
   const [showProjectModal, setShowProjectModal] = useState(false);
@@ -57,6 +75,31 @@ function App() {
   // sync with Firestore runs on startup, not only when Settings is open.
   const account = useAccount();
 
+  // Prefer the currently-playing track's cover; fall back to the selected
+  // project's so browsing an album previews its color before pressing play.
+  useAdaptiveAccent(
+    player.nowPlaying?.cover ?? projectDetail?.project.coverImage ?? null,
+    adaptiveAccentEnabled,
+  );
+
+  // Spacebar play/pause, ignored while typing in a text field (comments,
+  // playlist/project names, the license key input, etc.) so it doesn't
+  // hijack normal typing of literal spaces.
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.code !== "Space") return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (target?.isContentEditable || tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+        return;
+      }
+      e.preventDefault();
+      player.togglePlay();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [player]);
+
   // Initial data load. Every call is defensive: sibling agents are still
   // wiring up some of these commands, so a failure here should not crash
   // the shell — it should just leave that section empty.
@@ -78,12 +121,40 @@ function App() {
       .catch(() => {});
   }, []);
 
-  // Pick a default selected project once the list arrives.
+  // Pick a default selected project once the list arrives — but not while a
+  // playlist is the intentionally-selected view, or this would immediately
+  // stomp back over it every time selectedProjectId is cleared to view one.
   useEffect(() => {
-    if (selectedProjectId === null && projects.length > 0) {
+    if (selectedProjectId === null && selectedPlaylistId === null && projects.length > 0) {
       setSelectedProjectId(projects[0].id);
     }
-  }, [projects, selectedProjectId]);
+  }, [projects, selectedProjectId, selectedPlaylistId]);
+
+  // Loads the flat, resolved track list for whichever playlist (real or the
+  // pinned Favorites pseudo-playlist) is currently selected.
+  const loadPlaylistEntries = useCallback(() => {
+    if (!selectedPlaylistId) {
+      setPlaylistEntries([]);
+      return;
+    }
+    const loader =
+      selectedPlaylistId === FAVORITES_PLAYLIST_ID
+        ? api.listFavoriteTracks()
+        : api.getPlaylistDetail(selectedPlaylistId);
+    loader.then(setPlaylistEntries).catch(() => setPlaylistEntries([]));
+  }, [selectedPlaylistId]);
+
+  useEffect(() => {
+    loadPlaylistEntries();
+  }, [loadPlaylistEntries]);
+
+  // The Favorites pseudo-playlist has no dedicated backing table to refetch
+  // from on mutation — it's derived from `favorites`, so re-fetch whenever
+  // that changes (a heart toggled anywhere in the app) while it's open.
+  useEffect(() => {
+    if (selectedPlaylistId === FAVORITES_PLAYLIST_ID) loadPlaylistEntries();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [favorites]);
 
   // Load the detail payload whenever the selected project changes.
   useEffect(() => {
@@ -107,21 +178,13 @@ function App() {
 
   const handleSelectProject = useCallback((id: string) => {
     setSelectedProjectId(id);
+    setSelectedPlaylistId(null);
   }, []);
 
-  const handleChangeCoverStyle = useCallback(
-    (style: CoverStyle) => {
-      if (!selectedProjectId) return;
-      setProjectDetail((prev) =>
-        prev ? { ...prev, project: { ...prev.project, coverStyle: style } } : prev,
-      );
-      setProjects((prev) =>
-        prev.map((p) => (p.id === selectedProjectId ? { ...p, coverStyle: style } : p)),
-      );
-      api.setProjectCoverStyle(selectedProjectId, style).catch(() => {});
-    },
-    [selectedProjectId],
-  );
+  const handleSelectPlaylist = useCallback((id: string) => {
+    setSelectedPlaylistId(id);
+    setSelectedProjectId(null);
+  }, []);
 
   const isFavorite = useCallback(
     (trackId: string, versionId?: string) => favorites.has(favoriteKey(trackId, versionId)),
@@ -196,10 +259,11 @@ function App() {
           if (result.coverPath) {
             await api.setProjectCoverImage(project.id, "local", result.coverPath).catch(() => {});
           }
+          await api.setProjectCoverStyle(project.id, result.coverStyle).catch(() => {});
           const coverImage = result.coverPath
             ? { source: "local" as const, path: result.coverPath }
             : project.coverImage;
-          setProjects((prev) => [...prev, { ...project, coverImage }]);
+          setProjects((prev) => [...prev, { ...project, coverImage, coverStyle: result.coverStyle }]);
           setSelectedProjectId(project.id);
         }
       } catch {
@@ -301,17 +365,137 @@ function App() {
     api.setDefaultVersion(trackId, versionId).catch(() => {});
   }, []);
 
+  const [showNewPlaylistModal, setShowNewPlaylistModal] = useState(false);
+
   const handleNewPlaylist = useCallback(() => {
-    const name = window.prompt("Playlist name");
-    if (!name) return;
+    setShowNewPlaylistModal(true);
+  }, []);
+
+  const handleSubmitNewPlaylist = useCallback((name: string) => {
+    setShowNewPlaylistModal(false);
     api
       .createPlaylist(name)
       .then((playlist) => {
         setPlaylists((prev) => [...prev, playlist]);
         setSelectedPlaylistId(playlist.id);
+        setSelectedProjectId(null);
       })
       .catch(() => {});
   }, []);
+
+  const handleAddToPlaylist = useCallback(
+    (playlistId: string, trackId: string, versionId?: string) => {
+      api
+        .addToPlaylist(playlistId, trackId, versionId)
+        .then(() => {
+          if (playlistId === selectedPlaylistId) loadPlaylistEntries();
+        })
+        .catch(() => {});
+    },
+    [selectedPlaylistId, loadPlaylistEntries],
+  );
+
+  const handleCreatePlaylistWithTrack = useCallback(
+    (name: string, trackId: string, versionId?: string) => {
+      api
+        .createPlaylist(name)
+        .then(async (playlist) => {
+          setPlaylists((prev) => [...prev, playlist]);
+          await api.addToPlaylist(playlist.id, trackId, versionId);
+        })
+        .catch(() => {});
+    },
+    [],
+  );
+
+  const handleRemoveFromPlaylist = useCallback(
+    (trackId: string, versionId?: string) => {
+      if (!selectedPlaylistId) return;
+      if (selectedPlaylistId === FAVORITES_PLAYLIST_ID) {
+        handleToggleFavorite(trackId, versionId);
+        return;
+      }
+      api
+        .removeFromPlaylist(selectedPlaylistId, trackId, versionId)
+        .then(loadPlaylistEntries)
+        .catch(() => {});
+    },
+    [selectedPlaylistId, loadPlaylistEntries],
+  );
+
+  const handleRenamePlaylist = useCallback(
+    (name: string) => {
+      if (!selectedPlaylistId || selectedPlaylistId === FAVORITES_PLAYLIST_ID) return;
+      setPlaylists((prev) => prev.map((p) => (p.id === selectedPlaylistId ? { ...p, name } : p)));
+      api.renamePlaylist(selectedPlaylistId, name).catch(() => {});
+    },
+    [selectedPlaylistId],
+  );
+
+  const handleDeletePlaylist = useCallback(() => {
+    if (!selectedPlaylistId || selectedPlaylistId === FAVORITES_PLAYLIST_ID) return;
+    const id = selectedPlaylistId;
+    setPlaylists((prev) => prev.filter((p) => p.id !== id));
+    setSelectedPlaylistId(null);
+    api.deletePlaylist(id).catch(() => {});
+  }, [selectedPlaylistId]);
+
+  // Reflects one freshly-downloaded version (file_source flipped from
+  // "dropbox" to "local") back into projectDetail — shared by the single-row
+  // download button and the whole-project download loop below. Downloading
+  // never changes the version's id, so a version's comment thread (queried
+  // by versionId in WaveformPlayer) keeps showing exactly the same comments
+  // afterward — nothing to reconcile there.
+  const applyDownloadedVersion = useCallback((updated: Version) => {
+    setProjectDetail((prev) => {
+      if (!prev) return prev;
+      const versionsByTrack = { ...prev.versionsByTrack };
+      const owner = Object.keys(versionsByTrack).find((trackId) =>
+        versionsByTrack[trackId].some((v) => v.id === updated.id),
+      );
+      if (owner) {
+        versionsByTrack[owner] = versionsByTrack[owner].map((v) =>
+          v.id === updated.id ? updated : v,
+        );
+      }
+      return { ...prev, versionsByTrack };
+    });
+  }, []);
+
+  const handleDownloadVersion = useCallback(
+    (versionId: string) => {
+      setDownloadingVersionId(versionId);
+      api
+        .downloadVersion(versionId)
+        .then(applyDownloadedVersion)
+        .catch(() => {})
+        .finally(() => setDownloadingVersionId(null));
+    },
+    [applyDownloadedVersion],
+  );
+
+  const [projectDownloadLabel, setProjectDownloadLabel] = useState<string | null>(null);
+
+  const handleDownloadProject = useCallback(async () => {
+    if (!projectDetail || projectDownloadLabel) return;
+    const targets = projectDetail.tracks
+      .map((t) => {
+        const versions = projectDetail.versionsByTrack[t.id] ?? [];
+        return versions.find((v) => v.id === t.defaultVersionId) ?? versions[0] ?? null;
+      })
+      .filter((v): v is Version => !!v && v.file.source === "dropbox");
+    if (targets.length === 0) return;
+
+    try {
+      for (let i = 0; i < targets.length; i++) {
+        setProjectDownloadLabel(`Downloading ${i + 1} of ${targets.length}…`);
+        const updated = await api.downloadVersion(targets[i].id).catch(() => null);
+        if (updated) applyDownloadedVersion(updated);
+      }
+    } finally {
+      setProjectDownloadLabel(null);
+    }
+  }, [projectDetail, projectDownloadLabel, applyDownloadedVersion]);
 
   const handleOpenSettings = useCallback(() => setShowSettingsModal(true), []);
   const handleCloseSettings = useCallback(() => setShowSettingsModal(false), []);
@@ -334,6 +518,25 @@ function App() {
   const hasProjects = projects.length > 0;
 
   const mainContent = useMemo(() => {
+    if (selectedPlaylistId) {
+      return (
+        <PlaylistView
+          title={
+            selectedPlaylistId === FAVORITES_PLAYLIST_ID
+              ? "Favorites"
+              : playlists.find((p) => p.id === selectedPlaylistId)?.name ?? "Playlist"
+          }
+          isFavoritesView={selectedPlaylistId === FAVORITES_PLAYLIST_ID}
+          entries={playlistEntries}
+          player={player}
+          isFavorite={isFavorite}
+          onToggleFavorite={handleToggleFavorite}
+          onRemove={handleRemoveFromPlaylist}
+          onRename={handleRenamePlaylist}
+          onDelete={handleDeletePlaylist}
+        />
+      );
+    }
     if (!projectsLoaded) return null;
     if (!hasProjects) {
       return <EmptyState onImport={handleOpenNewProjectModal} busy={importBusy} />;
@@ -344,7 +547,6 @@ function App() {
         project={projectDetail.project}
         tracks={projectDetail.tracks}
         versionsByTrack={projectDetail.versionsByTrack}
-        onChangeCoverStyle={handleChangeCoverStyle}
         isFavorite={isFavorite}
         onToggleFavorite={handleToggleFavorite}
         player={player}
@@ -355,16 +557,27 @@ function App() {
         onAddTrackCover={handleAddTrackCover}
         onShare={handleShare}
         onShareAlbum={() => setShowAlbumShareModal(true)}
-        onNewProject={handleOpenNewProjectModal}
+        playlists={playlists}
+        onAddToPlaylist={handleAddToPlaylist}
+        onCreatePlaylistWithTrack={handleCreatePlaylistWithTrack}
+        onDownloadVersion={handleDownloadVersion}
+        downloadingVersionId={downloadingVersionId}
+        onDownloadProject={handleDownloadProject}
+        projectDownloadLabel={projectDownloadLabel}
       />
     );
   }, [
+    selectedPlaylistId,
+    playlistEntries,
+    playlists,
+    handleRemoveFromPlaylist,
+    handleRenamePlaylist,
+    handleDeletePlaylist,
     projectsLoaded,
     hasProjects,
     importBusy,
     handleOpenNewProjectModal,
     projectDetail,
-    handleChangeCoverStyle,
     isFavorite,
     handleToggleFavorite,
     player,
@@ -374,6 +587,12 @@ function App() {
     handleAddProjectCover,
     handleAddTrackCover,
     handleShare,
+    handleDownloadProject,
+    projectDownloadLabel,
+    handleAddToPlaylist,
+    handleCreatePlaylistWithTrack,
+    handleDownloadVersion,
+    downloadingVersionId,
   ]);
 
   return (
@@ -387,7 +606,7 @@ function App() {
           onNewProject={handleOpenNewProjectModal}
           playlists={playlists}
           selectedPlaylistId={selectedPlaylistId}
-          onSelectPlaylist={setSelectedPlaylistId}
+          onSelectPlaylist={handleSelectPlaylist}
           onNewPlaylist={handleNewPlaylist}
           onOpenSettings={handleOpenSettings}
         />
@@ -412,6 +631,13 @@ function App() {
         />
       ) : null}
 
+      {showNewPlaylistModal ? (
+        <NewPlaylistModal
+          onClose={() => setShowNewPlaylistModal(false)}
+          onSubmit={handleSubmitNewPlaylist}
+        />
+      ) : null}
+
       {pendingImportGroups ? (
         <ImportReviewModal
           initialGroups={pendingImportGroups}
@@ -427,6 +653,8 @@ function App() {
           selectedProjectId={selectedProjectId}
           onImported={handleDropboxImported}
           account={account}
+          adaptiveAccentEnabled={adaptiveAccentEnabled}
+          onToggleAdaptiveAccent={handleToggleAdaptiveAccent}
         />
       ) : null}
 

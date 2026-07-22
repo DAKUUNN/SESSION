@@ -1,6 +1,7 @@
 import type { Playlist, Project } from "@session/shared-types";
 import { CoverThumb } from "./CoverThumb";
-import { PlusIcon, SettingsIcon } from "./icons";
+import { HeartIcon, PlusIcon, SettingsIcon } from "./icons";
+import { FAVORITES_PLAYLIST_ID } from "../lib/constants";
 import "./Sidebar.css";
 
 interface SidebarProps {
@@ -47,7 +48,7 @@ export function Sidebar({
                 }
                 onClick={() => onSelectProject(project.id)}
               >
-                <CoverThumb cover={project.coverImage} size={22} />
+                <CoverThumb cover={project.coverImage} size={34} />
                 <span className="project-row__name">{project.name}</span>
               </button>
             ))
@@ -61,9 +62,17 @@ export function Sidebar({
               <PlusIcon />
             </button>
           </div>
-          {playlists.length === 0 ? (
-            <div className="sidebar__empty">No playlists yet</div>
-          ) : (
+          <button
+            className={
+              "playlist-row playlist-row--favorites" +
+              (selectedPlaylistId === FAVORITES_PLAYLIST_ID ? " is-active" : "")
+            }
+            onClick={() => onSelectPlaylist(FAVORITES_PLAYLIST_ID)}
+          >
+            <HeartIcon filled className="playlist-row__icon" />
+            Favorites
+          </button>
+          {playlists.length === 0 ? null : (
             playlists.map((playlist) => (
               <button
                 key={playlist.id}

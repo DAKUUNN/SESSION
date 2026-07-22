@@ -114,3 +114,21 @@ pub struct ProjectDetail {
     pub tracks: Vec<Track>,
     pub versions_by_track: std::collections::HashMap<String, Vec<Version>>,
 }
+
+/// One resolved, playable row in a flat (cross-project) track list — used by both
+/// real playlists (`get_playlist_detail`) and the pinned Favorites pseudo-playlist
+/// (`list_favorite_tracks`). Unlike `ProjectDetail`, which is scoped to one project,
+/// these entries carry their own project identity/name/cover since a playlist can
+/// mix tracks from any number of projects.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaylistTrackEntry {
+    pub track: Track,
+    /// The pinned version if the playlist item specifies one, otherwise the
+    /// track's current default/master version. `None` only if the track has
+    /// no versions at all (shouldn't normally happen, but tolerated).
+    pub version: Option<Version>,
+    pub project_id: String,
+    pub project_name: String,
+    pub project_cover: Option<FileRef>,
+}

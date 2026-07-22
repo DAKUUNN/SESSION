@@ -78,6 +78,15 @@ export function PlayerBar({
   const duration = status.durationSeconds;
   const positionRatio = duration > 0 ? Math.min(1, status.positionSeconds / duration) : 0;
 
+  // Remembers the volume from just before a mute-click, so clicking the
+  // speaker icon again restores it instead of just jumping back to 100%.
+  const lastVolumeRef = useRef(volume || 0.8);
+  if (volume > 0) lastVolumeRef.current = volume;
+
+  function handleToggleMute() {
+    onVolumeChange(volume > 0 ? 0 : lastVolumeRef.current);
+  }
+
   return (
     <footer className="player-bar">
       {cover?.path ? (
@@ -130,9 +139,14 @@ export function PlayerBar({
       )}
 
       <div className="player-bar__volume">
-        <span className="player-bar__volume-icon">
+        <button
+          type="button"
+          className="player-bar__volume-icon"
+          onClick={handleToggleMute}
+          title={volume <= 0 ? "Unmute" : "Mute"}
+        >
           {volume <= 0 ? <VolumeMuteIcon /> : <VolumeIcon />}
-        </span>
+        </button>
         <DragBar
           ratio={volume}
           onChange={onVolumeChange}

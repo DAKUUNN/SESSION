@@ -1,4 +1,5 @@
 mod audio;
+mod color;
 mod db;
 mod dropbox;
 mod licensing;
@@ -40,9 +41,18 @@ pub fn run() {
             db::list_playlists,
             db::create_playlist,
             db::add_to_playlist,
+            db::remove_from_playlist,
+            db::delete_playlist,
+            db::rename_playlist,
+            db::get_playlist_detail,
+            db::list_favorite_tracks,
             db::list_favorites,
             db::toggle_favorite,
+            db::get_download_dir,
+            db::set_download_dir,
+            db::download_version,
             waveform::generate_peaks_cmd,
+            color::sample_cover_color,
             audio::audio_load,
             audio::audio_play,
             audio::audio_pause,

@@ -9,6 +9,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   Favorite,
   Playlist,
+  PlaylistTrackEntry,
   Project,
   ProjectKind,
   Track,
@@ -99,13 +100,38 @@ export const api = {
   addToPlaylist: (playlistId: string, trackId: string, versionId?: string) =>
     invoke<void>("add_to_playlist", { playlistId, trackId, versionId }),
 
+  removeFromPlaylist: (playlistId: string, trackId: string, versionId?: string) =>
+    invoke<void>("remove_from_playlist", { playlistId, trackId, versionId }),
+
+  deletePlaylist: (playlistId: string) =>
+    invoke<void>("delete_playlist", { playlistId }),
+
+  renamePlaylist: (playlistId: string, name: string) =>
+    invoke<void>("rename_playlist", { playlistId, name }),
+
+  getPlaylistDetail: (playlistId: string) =>
+    invoke<PlaylistTrackEntry[]>("get_playlist_detail", { playlistId }),
+
+  listFavoriteTracks: () => invoke<PlaylistTrackEntry[]>("list_favorite_tracks"),
+
   listFavorites: () => invoke<Favorite[]>("list_favorites"),
 
   toggleFavorite: (trackId: string, versionId?: string) =>
     invoke<boolean>("toggle_favorite", { trackId, versionId }),
 
+  getDownloadDirectory: () => invoke<string>("get_download_dir"),
+
+  setDownloadDirectory: (path: string) =>
+    invoke<void>("set_download_dir", { path }),
+
+  downloadVersion: (versionId: string) =>
+    invoke<Version>("download_version", { versionId }),
+
   generatePeaks: (path: string, bucketCount: number) =>
     invoke<number[]>("generate_peaks_cmd", { path, bucketCount }),
+
+  sampleCoverColor: (path: string) =>
+    invoke<[number, number, number]>("sample_cover_color", { path }),
 
   audioLoad: (path: string) => invoke<void>("audio_load", { path }),
   audioPlay: () => invoke<void>("audio_play"),

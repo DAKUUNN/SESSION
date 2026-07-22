@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { Project, ProjectKind } from "@session/shared-types";
+import type { CoverStyle, Project, ProjectKind } from "@session/shared-types";
 import { Modal } from "./Modal";
 import { CoverThumb } from "./CoverThumb";
 import "./NewProjectModal.css";
@@ -19,6 +19,8 @@ export interface NewProjectModalResult {
   kind: ProjectKind;
   /** A newly-picked local cover path, or null if the user didn't touch the cover. */
   coverPath: string | null;
+  /** Only meaningful (and only asked) when creating — fixed for the project's lifetime after that. */
+  coverStyle: CoverStyle;
 }
 
 interface NewProjectModalProps {
@@ -39,6 +41,7 @@ export function NewProjectModal({ project, onClose, onSubmit, busy = false }: Ne
   const isEdit = !!project;
   const [name, setName] = useState(project?.name ?? "");
   const [kind, setKind] = useState<ProjectKind>(project?.kind ?? "single");
+  const [coverStyle, setCoverStyle] = useState<CoverStyle>("album");
   const [coverPath, setCoverPath] = useState<string | null>(null);
   const [coverPreviewPath, setCoverPreviewPath] = useState<string | null>(
     project?.coverImage?.path ?? null,
@@ -63,7 +66,7 @@ export function NewProjectModal({ project, onClose, onSubmit, busy = false }: Ne
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed || busy) return;
-    onSubmit({ name: trimmed, kind, coverPath });
+    onSubmit({ name: trimmed, kind, coverPath, coverStyle });
   }
 
   const canSubmit = name.trim().length > 0 && !busy;
@@ -142,6 +145,34 @@ export function NewProjectModal({ project, onClose, onSubmit, busy = false }: Ne
                 ))}
               </div>
             </div>
+
+            {!isEdit ? (
+              <div className="field">
+                <span className="field__label">Cover style</span>
+                <div className="kind-picker">
+                  <button
+                    type="button"
+                    className={"kind-picker__btn" + (coverStyle === "album" ? " is-selected" : "")}
+                    onClick={() => setCoverStyle("album")}
+                  >
+                    Album cover
+                  </button>
+                  <button
+                    type="button"
+                    className={"kind-picker__btn" + (coverStyle === "individual" ? " is-selected" : "")}
+                    onClick={() => setCoverStyle("individual")}
+                  >
+                    Individual covers
+                  </button>
+                </div>
+                <span className="field__hint">
+                  {coverStyle === "album"
+                    ? "One hero cover for the whole release, numbered tracklist."
+                    : "Every track keeps its own cover, playlist-style."}{" "}
+                  Fixed once the project is created.
+                </span>
+              </div>
+            ) : null}
           </div>
         </div>
       </form>

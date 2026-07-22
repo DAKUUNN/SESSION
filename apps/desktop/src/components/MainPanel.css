@@ -18,7 +18,7 @@
   justify-content: center;
   border: 2px dashed var(--accent);
   border-radius: var(--radius-md);
-  background: rgba(79, 215, 196, 0.08);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
   pointer-events: none;
 }
 
@@ -27,70 +27,6 @@
   font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--accent);
-}
-
-.main-panel__toolbar {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 28px 0;
-}
-
-.main-panel__new-project {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 5px 12px 5px 9px;
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-}
-
-.main-panel__new-project svg {
-  width: 12px;
-  height: 12px;
-}
-
-.main-panel__new-project:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: var(--surface-2);
-}
-
-.segmented {
-  display: inline-flex;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-}
-
-.segmented__btn {
-  padding: 5px 12px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  border-right: 1px solid var(--border);
-}
-
-.segmented__btn:last-child {
-  border-right: none;
-}
-
-.segmented__btn:hover {
-  color: var(--text);
-}
-
-.segmented__btn.is-selected {
-  background: var(--surface-2);
   color: var(--accent);
 }
 
@@ -241,7 +177,7 @@
 .hero__play:hover {
   filter: brightness(1.08);
   transform: scale(1.05);
-  box-shadow: 0 0 0 6px rgba(79, 215, 196, 0.14);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .hero__play:active {
@@ -271,7 +207,7 @@
   color: var(--text);
 }
 
-.simple-header__edit-btn {
+.simple-header__icon-btn {
   flex-shrink: 0;
   border: none;
   color: var(--text-faint);
@@ -279,16 +215,16 @@
   transition: opacity 0.12s ease;
 }
 
-.simple-header:hover .simple-header__edit-btn,
-.simple-header__edit-btn:focus-visible {
+.simple-header:hover .simple-header__icon-btn,
+.simple-header__icon-btn:focus-visible {
   opacity: 1;
 }
 
-.simple-header__edit-btn:hover {
+.simple-header__icon-btn:hover {
   color: var(--accent);
 }
 
-.simple-header__edit-btn svg {
+.simple-header__icon-btn svg {
   width: 12px;
   height: 12px;
 }

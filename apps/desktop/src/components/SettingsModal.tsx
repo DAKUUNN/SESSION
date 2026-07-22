@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import { api, type DropboxAccountInfo, type DropboxFileEntry } from "../lib/api";
 import { formatFileSize } from "../lib/format";
 import type { AccountApi } from "../hooks/useAccount";
@@ -31,6 +32,45 @@ interface SettingsModalProps {
   onImported: () => void;
   /** Account + licensing state, owned app-wide by App.tsx's useAccount hook. */
   account: AccountApi;
+  /** Experimental "match accent color to cover art" toggle — see useAdaptiveAccent. */
+  adaptiveAccentEnabled: boolean;
+  onToggleAdaptiveAccent: (enabled: boolean) => void;
+}
+
+/** Appearance section: the experimental cover-art-adaptive accent color toggle. */
+function AppearanceSection({
+  adaptiveAccentEnabled,
+  onToggleAdaptiveAccent,
+}: {
+  adaptiveAccentEnabled: boolean;
+  onToggleAdaptiveAccent: (enabled: boolean) => void;
+}) {
+  return (
+    <div className="settings-section">
+      <div className="settings-section__head">
+        <span className="mono-label">Appearance</span>
+      </div>
+      <label className="settings-toggle-row">
+        <span className="switch">
+          <input
+            type="checkbox"
+            checked={adaptiveAccentEnabled}
+            onChange={(e) => onToggleAdaptiveAccent(e.target.checked)}
+          />
+          <span className="switch__track">
+            <span className="switch__thumb" />
+          </span>
+        </span>
+        <span>
+          <div className="settings-toggle-row__label">Match accent color to cover art</div>
+          <div className="settings-toggle-row__hint">
+            Experimental — tints buttons and highlights across the app using the current cover's
+            color instead of the default accent.
+          </div>
+        </span>
+      </label>
+    </div>
+  );
 }
 
 /** Account (Firebase magic-link sign-in) section. */
@@ -189,12 +229,80 @@ function LicenseSection({ account }: { account: AccountApi }) {
   );
 }
 
+/** Local storage section: where `download_version` copies dropbox-sourced files
+ *  for faster local playback (see the per-track download button in TrackRow). */
+function StorageSection() {
+  const [dir, setDir] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getDownloadDirectory()
+      .then((d) => {
+        if (!cancelled) setDir(d);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleChange() {
+    try {
+      const selection = await open({ directory: true, multiple: false });
+      const path = Array.isArray(selection) ? selection[0] : selection;
+      if (!path) return;
+      setBusy(true);
+      await api.setDownloadDirectory(path);
+      setDir(path);
+    } catch {
+      /* user cancelled the dialog, or the backend isn't ready yet */
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="settings-section">
+      <div className="settings-section__head">
+        <span className="mono-label">Storage</span>
+      </div>
+      <p className="settings-copy">
+        Downloaded tracks are saved here for faster local playback instead of streaming from
+        Dropbox each time.
+      </p>
+      {!loaded ? (
+        <div className="settings-status">Checking…</div>
+      ) : (
+        <div className="settings-account__row">
+          <div className="settings-account__identity">{dir ?? "Not set"}</div>
+          <button type="button" className="btn btn--secondary" onClick={handleChange} disabled={busy}>
+            {busy ? "Saving…" : "Change…"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Settings surface: account sign-in, license activation, and the Dropbox
  * integration (connect/disconnect, browse + import from the app folder).
  * Reuses the shared Modal shell the same way NewProjectModal does.
  */
-export function SettingsModal({ onClose, selectedProjectId, onImported, account }: SettingsModalProps) {
+export function SettingsModal({
+  onClose,
+  selectedProjectId,
+  onImported,
+  account,
+  adaptiveAccentEnabled,
+  onToggleAdaptiveAccent,
+}: SettingsModalProps) {
   const [connection, setConnection] = useState<DropboxAccountInfo | null>(null);
   const [connectionLoaded, setConnectionLoaded] = useState(false);
   const [connectBusy, setConnectBusy] = useState(false);
@@ -348,6 +456,11 @@ export function SettingsModal({ onClose, selectedProjectId, onImported, account 
     <Modal title="Settings" onClose={onClose} width={600}>
       <AccountSection account={account} />
       <LicenseSection account={account} />
+      <AppearanceSection
+        adaptiveAccentEnabled={adaptiveAccentEnabled}
+        onToggleAdaptiveAccent={onToggleAdaptiveAccent}
+      />
+      <StorageSection />
 
       <div className="settings-section">
         <div className="settings-section__head">

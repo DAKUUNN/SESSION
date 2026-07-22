@@ -10,30 +10,49 @@ import {
 import { formatDuration } from "../lib/format";
 import "./WaveformPlayer.css";
 
-const BUCKET_COUNT = 200;
+const MIN_BUCKETS = 80;
+const MAX_BUCKETS = 480;
+/** Snap grid for the resize-observer-driven bucket count — coarse enough that
+ *  dragging the window doesn't spam the (uncached, full-decode) Rust peak
+ *  generator, fine enough that the bar width stays visually consistent
+ *  across window sizes instead of turning chunky/blocky at fullscreen. */
+const BUCKET_SNAP = 20;
 
-// Module-level cache so re-mounting the same track (e.g. collapsing and
-// re-expanding a row) doesn't re-request peak data from the backend.
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+/** ~4px per bar is the density that reads as a "real" waveform rather than
+ *  either a pixelated block (too few buckets for a wide container) or a
+ *  smeared blur (too many for a narrow one). */
+function bucketCountForWidth(width: number): number {
+  return Math.round(clamp(width / 4, MIN_BUCKETS, MAX_BUCKETS) / BUCKET_SNAP) * BUCKET_SNAP;
+}
+
+// Module-level cache so re-mounting the same track at the same bucket count
+// (e.g. collapsing and re-expanding a row without resizing) doesn't
+// re-request peak data from the backend.
 const peaksCache = new Map<string, number[]>();
 const peaksInflight = new Map<string, Promise<number[]>>();
 
-function getPeaks(path: string): Promise<number[]> {
-  const cached = peaksCache.get(path);
+function getPeaks(path: string, bucketCount: number): Promise<number[]> {
+  const key = `${path}::${bucketCount}`;
+  const cached = peaksCache.get(key);
   if (cached) return Promise.resolve(cached);
-  const inflight = peaksInflight.get(path);
+  const inflight = peaksInflight.get(key);
   if (inflight) return inflight;
   const promise = api
-    .generatePeaks(path, BUCKET_COUNT)
+    .generatePeaks(path, bucketCount)
     .then((peaks) => {
-      peaksCache.set(path, peaks);
-      peaksInflight.delete(path);
+      peaksCache.set(key, peaks);
+      peaksInflight.delete(key);
       return peaks;
     })
     .catch((err) => {
-      peaksInflight.delete(path);
+      peaksInflight.delete(key);
       throw err;
     });
-  peaksInflight.set(path, promise);
+  peaksInflight.set(key, promise);
   return promise;
 }
 
@@ -59,7 +78,33 @@ export function WaveformPlayer({
 }: WaveformPlayerProps) {
   const [peaks, setPeaks] = useState<number[] | null>(null);
   const [failed, setFailed] = useState(false);
+  const [bucketCount, setBucketCount] = useState(200);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  // Re-derives the bucket count from the rendered width so the waveform
+  // stays crisp instead of turning into a handful of fat blocks when the
+  // window (and this row with it) goes fullscreen. Debounced so dragging a
+  // window edge doesn't spam the backend's full-file peak decode.
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width;
+      if (!width) return;
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        const desired = bucketCountForWidth(width);
+        setBucketCount((prev) => (Math.abs(prev - desired) >= BUCKET_SNAP ? desired : prev));
+      }, 200);
+    });
+    observer.observe(el);
+    return () => {
+      if (timeout) clearTimeout(timeout);
+      observer.disconnect();
+    };
+  }, []);
 
   const [user, setUser] = useState<User | null>(null);
   const [comments, setComments] = useState<VersionComment[]>([]);
@@ -74,7 +119,7 @@ export function WaveformPlayer({
     let cancelled = false;
     setPeaks(null);
     setFailed(false);
-    getPeaks(path)
+    getPeaks(path, bucketCount)
       .then((p) => {
         if (!cancelled) setPeaks(p);
       })
@@ -84,7 +129,7 @@ export function WaveformPlayer({
     return () => {
       cancelled = true;
     };
-  }, [path]);
+  }, [path, bucketCount]);
 
   // Live comment feed for this version — only when signed in (Firestore
   // rules require an authenticated reader). Signed-out artists simply see
@@ -128,12 +173,11 @@ export function WaveformPlayer({
     }
   }
 
-  const bars: number[] = peaks ?? new Array(BUCKET_COUNT * 2).fill(0);
-  const bucketCount = bars.length / 2;
+  const bars: number[] = peaks ?? new Array(bucketCount * 2).fill(0);
   const playedBucket = Math.floor(playedRatio * bucketCount);
 
   return (
-    <div className="waveform">
+    <div className="waveform" ref={wrapRef}>
       <div className="waveform__pins" aria-hidden={comments.length === 0}>
         {effectiveDuration > 0
           ? comments.map((c) => (

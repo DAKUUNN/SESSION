@@ -120,6 +120,28 @@ export function SettingsIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function DownloadIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Svg {...props}>
+      <path d="M12 3v12" />
+      <path d="M7 10l5 5 5-5" />
+      <path d="M4 19.5h16" />
+    </Svg>
+  );
+}
+
+export function PlaylistAddIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Svg {...props}>
+      <path d="M4 6h13" />
+      <path d="M4 12h9" />
+      <path d="M4 18h6" />
+      <path d="M17 15v6" />
+      <path d="M14 18h6" />
+    </Svg>
+  );
+}
+
 export function RefreshIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <Svg {...props}>

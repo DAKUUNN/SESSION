@@ -1,9 +1,9 @@
 import { useCallback, useMemo } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import type { CoverStyle, Project, Track, Version } from "@session/shared-types";
+import type { Playlist, Project, Track, Version } from "@session/shared-types";
 import { CoverThumb } from "./CoverThumb";
 import { TrackRow } from "./TrackRow";
-import { EditIcon, PauseIcon, PlayIcon, PlusIcon, ShareIcon, ShuffleIcon } from "./icons";
+import { DownloadIcon, EditIcon, PauseIcon, PlayIcon, ShareIcon, ShuffleIcon } from "./icons";
 import { formatDuration, formatRelativeTime } from "../lib/format";
 import type { PlayerApi } from "../hooks/usePlayer";
 import { useFileDrop } from "../hooks/useFileDrop";
@@ -18,7 +18,6 @@ interface MainPanelProps {
   project: Project;
   tracks: Track[];
   versionsByTrack: Record<string, Version[]>;
-  onChangeCoverStyle: (style: CoverStyle) => void;
   isFavorite: (trackId: string, versionId?: string) => boolean;
   onToggleFavorite: (trackId: string, versionId?: string) => void;
   player: PlayerApi;
@@ -36,15 +35,24 @@ interface MainPanelProps {
   onShare: (track: Track, version: Version) => void;
   /** Opens the album-share modal for the whole project. */
   onShareAlbum: () => void;
-  /** Opens the New Project modal. */
-  onNewProject: () => void;
+  /** All playlists, for each row's "add to playlist" menu. */
+  playlists: Playlist[];
+  onAddToPlaylist: (playlistId: string, trackId: string, versionId?: string) => void;
+  onCreatePlaylistWithTrack: (name: string, trackId: string, versionId?: string) => void;
+  /** Downloads a dropbox-sourced version into the configured local download folder. */
+  onDownloadVersion: (versionId: string) => void;
+  /** The versionId currently mid-download, if any (disables that row's button). */
+  downloadingVersionId: string | null;
+  /** Downloads every track's current version in this project — the whole-project counterpart of onDownloadVersion. */
+  onDownloadProject: () => void;
+  /** Set while onDownloadProject is running; also doubles as its status label ("Downloading 2 of 5…"). */
+  projectDownloadLabel: string | null;
 }
 
 export function MainPanel({
   project,
   tracks,
   versionsByTrack,
-  onChangeCoverStyle,
   isFavorite,
   onToggleFavorite,
   player,
@@ -55,7 +63,13 @@ export function MainPanel({
   onAddTrackCover,
   onShare,
   onShareAlbum,
-  onNewProject,
+  playlists,
+  onAddToPlaylist,
+  onCreatePlaylistWithTrack,
+  onDownloadVersion,
+  downloadingVersionId,
+  onDownloadProject,
+  projectDownloadLabel,
 }: MainPanelProps) {
   const { nowPlaying, status, loadAndPlay, switchVersion, seek } = player;
 
@@ -67,6 +81,13 @@ export function MainPanel({
         const v = defaultVersionFor(t, versionsByTrack);
         return sum + (v?.durationSeconds ?? 0);
       }, 0),
+    [tracks, versionsByTrack],
+  );
+
+  // Only worth offering when at least one track still streams from Dropbox
+  // rather than already playing from a local copy.
+  const hasDownloadableVersions = useMemo(
+    () => tracks.some((t) => defaultVersionFor(t, versionsByTrack)?.file.source === "dropbox"),
     [tracks, versionsByTrack],
   );
 
@@ -143,29 +164,6 @@ export function MainPanel({
           <div className="main-panel__drop-overlay-text">Drop to import</div>
         </div>
       ) : null}
-      <div className="main-panel__toolbar">
-        <div className="segmented">
-          <button
-            className={"segmented__btn" + (project.coverStyle === "album" ? " is-selected" : "")}
-            onClick={() => onChangeCoverStyle("album")}
-          >
-            Album cover
-          </button>
-          <button
-            className={
-              "segmented__btn" + (project.coverStyle === "individual" ? " is-selected" : "")
-            }
-            onClick={() => onChangeCoverStyle("individual")}
-          >
-            Individual covers
-          </button>
-        </div>
-        <button type="button" className="main-panel__new-project" onClick={onNewProject}>
-          <PlusIcon />
-          New project
-        </button>
-      </div>
-
       <div className="main-panel__scroll">
         {project.coverStyle === "album" ? (
           <div className="hero" key={project.id}>
@@ -213,6 +211,16 @@ export function MainPanel({
                 >
                   <ShareIcon />
                 </button>
+                {hasDownloadableVersions ? (
+                  <button
+                    className="icon-btn hero__icon-btn"
+                    title={projectDownloadLabel ?? `Download the whole ${project.kind} for faster local playback`}
+                    onClick={onDownloadProject}
+                    disabled={!!projectDownloadLabel}
+                  >
+                    <DownloadIcon />
+                  </button>
+                ) : null}
               </div>
             </div>
           </div>
@@ -221,12 +229,22 @@ export function MainPanel({
             <div className="simple-header__title-row">
               <div className="simple-header__title">{project.name}</div>
               <button
-                className="icon-btn simple-header__edit-btn"
+                className="icon-btn simple-header__icon-btn"
                 onClick={onEditProject}
                 title="Edit project"
               >
                 <EditIcon />
               </button>
+              {hasDownloadableVersions ? (
+                <button
+                  className="icon-btn simple-header__icon-btn"
+                  title={projectDownloadLabel ?? `Download the whole ${project.kind} for faster local playback`}
+                  onClick={onDownloadProject}
+                  disabled={!!projectDownloadLabel}
+                >
+                  <DownloadIcon />
+                </button>
+              ) : null}
             </div>
             <div className="simple-header__count">
               {tracks.length} track{tracks.length === 1 ? "" : "s"}
@@ -259,6 +277,13 @@ export function MainPanel({
                   positionSeconds={isActive ? status.positionSeconds : 0}
                   durationSeconds={isActive ? status.durationSeconds : 0}
                   onSeek={seek}
+                  playlists={playlists}
+                  onAddToPlaylist={(playlistId) => onAddToPlaylist(playlistId, track.id, version?.id)}
+                  onCreatePlaylistWithTrack={(name) =>
+                    onCreatePlaylistWithTrack(name, track.id, version?.id)
+                  }
+                  onDownload={version ? () => onDownloadVersion(version.id) : undefined}
+                  downloadBusy={!!version && downloadingVersionId === version.id}
                 />
               );
             })

@@ -1,9 +1,9 @@
 import { useState } from "react";
-import type { Track, Version } from "@session/shared-types";
+import type { Playlist, Track, Version } from "@session/shared-types";
 import { CoverThumb } from "./CoverThumb";
 import { EqualizerBars } from "./EqualizerBars";
 import { WaveformPlayer } from "./WaveformPlayer";
-import { HeartIcon, PauseIcon, PlayIcon, ShareIcon } from "./icons";
+import { DownloadIcon, HeartIcon, PauseIcon, PlayIcon, PlaylistAddIcon, ShareIcon } from "./icons";
 import { formatDuration } from "../lib/format";
 import "./TrackRow.css";
 
@@ -28,6 +28,13 @@ interface TrackRowProps {
   positionSeconds: number;
   durationSeconds: number;
   onSeek: (seconds: number) => void;
+  /** All playlists, for the "add to playlist" menu. */
+  playlists?: Playlist[];
+  onAddToPlaylist?: (playlistId: string) => void;
+  onCreatePlaylistWithTrack?: (name: string) => void;
+  /** Copies this dropbox-sourced version into the configured download folder for faster local playback. */
+  onDownload?: () => void;
+  downloadBusy?: boolean;
 }
 
 export function TrackRow({
@@ -46,11 +53,19 @@ export function TrackRow({
   positionSeconds,
   durationSeconds,
   onSeek,
+  playlists = [],
+  onAddToPlaylist,
+  onCreatePlaylistWithTrack,
+  onDownload,
+  downloadBusy,
 }: TrackRowProps) {
   const [showVersionMenu, setShowVersionMenu] = useState(false);
+  const [showPlaylistMenu, setShowPlaylistMenu] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState("");
   const showNumber = index !== undefined;
   const isDefaultVersion = !!version && version.id === track.defaultVersionId;
   const hasMultipleVersions = versions.length > 1;
+  const showDownload = !!onDownload && version?.file.source === "dropbox";
 
   return (
     <div>
@@ -184,6 +199,87 @@ export function TrackRow({
         <span className="track-row__duration">
           {version ? formatDuration(version.durationSeconds) : "--:--"}
         </span>
+
+        {showDownload ? (
+          <button
+            className="track-share-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDownload?.();
+            }}
+            disabled={downloadBusy}
+            title={downloadBusy ? "Downloading…" : "Download for faster local playback"}
+          >
+            <DownloadIcon />
+          </button>
+        ) : null}
+
+        {onAddToPlaylist || onCreatePlaylistWithTrack ? (
+          <span className="version-chip-wrap">
+            <button
+              className="track-share-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowPlaylistMenu((v) => !v);
+              }}
+              title="Add to playlist"
+            >
+              <PlaylistAddIcon />
+            </button>
+            {showPlaylistMenu ? (
+              <>
+                <div
+                  className="version-menu-backdrop"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowPlaylistMenu(false);
+                  }}
+                />
+                <div className="version-menu playlist-add-menu" onClick={(e) => e.stopPropagation()}>
+                  {playlists.length === 0 ? (
+                    <div className="playlist-add-menu__empty">No playlists yet</div>
+                  ) : (
+                    playlists.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className="version-menu__item"
+                        onClick={() => {
+                          setShowPlaylistMenu(false);
+                          onAddToPlaylist?.(p.id);
+                        }}
+                      >
+                        {p.name}
+                      </button>
+                    ))
+                  )}
+                  {onCreatePlaylistWithTrack ? (
+                    <form
+                      className="playlist-add-menu__new"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const trimmed = newPlaylistName.trim();
+                        if (!trimmed) return;
+                        onCreatePlaylistWithTrack(trimmed);
+                        setNewPlaylistName("");
+                        setShowPlaylistMenu(false);
+                      }}
+                    >
+                      <input
+                        className="playlist-add-menu__input"
+                        placeholder="New playlist…"
+                        value={newPlaylistName}
+                        onChange={(e) => setNewPlaylistName(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        autoFocus={playlists.length === 0}
+                      />
+                    </form>
+                  ) : null}
+                </div>
+              </>
+            ) : null}
+          </span>
+        ) : null}
 
         {onShare && version ? (
           <button

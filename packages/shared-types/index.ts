@@ -68,6 +68,17 @@ export interface Favorite {
   favoritedAt: string;
 }
 
+/** One resolved, playable row in a flat cross-project track list — used by both
+ *  real playlists and the pinned Favorites pseudo-playlist. */
+export interface PlaylistTrackEntry {
+  track: Track;
+  /** The pinned version if set, otherwise the track's current default version. */
+  version: Version | null;
+  projectId: string;
+  projectName: string;
+  projectCover?: FileRef;
+}
+
 export interface PeakData {
   /** Downsampled min/max pairs, one per bucket, values in [-1, 1]. */
   peaks: number[];

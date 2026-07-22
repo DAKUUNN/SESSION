@@ -1,0 +1,23 @@
+.playlist-view__header {
+  padding: 28px 28px 16px;
+}
+
+.playlist-view__title-icon {
+  width: 22px;
+  height: 22px;
+  margin-right: 10px;
+  vertical-align: -3px;
+}
+
+.playlist-view__actions {
+  margin-top: 14px;
+}
+
+.playlist-view__project-name {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
