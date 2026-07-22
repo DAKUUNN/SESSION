@@ -190,3 +190,172 @@ export const postShareLinkComment = onCall({ region: REGION }, async (request) =
   });
   return { ok: true };
 });
+
+// ---------------------------------------------------------------------------
+// Whole-project ("share this entire EP/album") sharing. Same infrastructure
+// as the single-track share links above, just fanned out over a list of
+// tracks instead of pinning exactly one. Comments still land in the same
+// top-level `comments` collection, scoped by versionId alone — a guest
+// comment doesn't know or care whether it came from a single-track link or
+// an album link.
+// ---------------------------------------------------------------------------
+
+interface AlbumShareLinkTrack {
+  title: string;
+  versionId: string;
+  versionLabel: string;
+  dropboxPath: string;
+  durationSeconds: number;
+  /** Flattened min/max peak pairs for waveform rendering on the guest page. */
+  peaks: number[];
+}
+
+interface AlbumShareLinkDoc {
+  ownerUid: string;
+  projectName: string;
+  projectKind: string;
+  tracks: AlbumShareLinkTrack[];
+  revoked: boolean;
+  viewCount: number;
+  createdAt: FirebaseFirestore.FieldValue | FirebaseFirestore.Timestamp;
+}
+
+function requireAlbumTrack(value: unknown, index: number): AlbumShareLinkTrack {
+  const track = (value ?? {}) as Record<string, unknown>;
+  return {
+    title: requireString(track.title, `tracks[${index}].title`, 300),
+    versionId: requireString(track.versionId, `tracks[${index}].versionId`, 100),
+    versionLabel: requireString(track.versionLabel, `tracks[${index}].versionLabel`, 100),
+    dropboxPath: requireString(track.dropboxPath, `tracks[${index}].dropboxPath`),
+    durationSeconds:
+      typeof track.durationSeconds === "number" ? track.durationSeconds : 0,
+    peaks: Array.isArray(track.peaks) ? track.peaks.slice(0, 4000).map(Number) : [],
+  };
+}
+
+/** Mints an unguessable share token for an entire project's track list. */
+export const createAlbumShareLink = onCall({ region: REGION }, async (request) => {
+  const uid = requireAuth(request.auth?.uid);
+  const data = request.data ?? {};
+  const rawTracks = Array.isArray(data.tracks) ? data.tracks : [];
+  if (rawTracks.length === 0) {
+    throw new HttpsError("invalid-argument", "missing or invalid tracks");
+  }
+  const doc: AlbumShareLinkDoc = {
+    ownerUid: uid,
+    projectName: requireString(data.projectName, "projectName", 300),
+    projectKind: requireString(data.projectKind, "projectKind", 50),
+    tracks: rawTracks.map((t: unknown, i: number) => requireAlbumTrack(t, i)),
+    revoked: false,
+    viewCount: 0,
+    createdAt: FieldValue.serverTimestamp(),
+  };
+  const token = randomBytes(24).toString("base64url");
+  await db.doc(`albumShareLinks/${token}`).set(doc);
+  return { token };
+});
+
+/** Owner revokes an album link; guests hitting it afterwards get denied. */
+export const revokeAlbumShareLink = onCall({ region: REGION }, async (request) => {
+  const uid = requireAuth(request.auth?.uid);
+  const token = requireString(request.data?.token, "token", 100);
+  const ref = db.doc(`albumShareLinks/${token}`);
+  const snap = await ref.get();
+  if (!snap.exists || snap.get("ownerUid") !== uid) {
+    throw new HttpsError("permission-denied", "not your link");
+  }
+  await ref.update({ revoked: true });
+  return { ok: true };
+});
+
+/**
+ * Guest entry point for album links: validates the token (existence +
+ * revocation re-checked on EVERY call) and returns playback metadata plus a
+ * short-lived Dropbox streaming URL for EVERY track in the project. No
+ * Firebase auth required — the token is the credential.
+ */
+export const getAlbumShareLinkPlaybackInfo = onCall({ region: REGION }, async (request) => {
+  const token = requireString(request.data?.token, "token", 100);
+  const snap = await db.doc(`albumShareLinks/${token}`).get();
+  if (!snap.exists) throw new HttpsError("not-found", "this link does not exist");
+  const link = snap.data() as AlbumShareLinkDoc;
+  if (link.revoked) throw new HttpsError("permission-denied", "this link has been revoked");
+
+  const accessToken = await dropboxAccessTokenFor(link.ownerUid);
+  const tracks = await Promise.all(
+    link.tracks.map(async (track) => {
+      const resp = await fetch("https://api.dropboxapi.com/2/files/get_temporary_link", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ path: track.dropboxPath }),
+      });
+      if (!resp.ok) {
+        throw new HttpsError(
+          "internal",
+          `could not prepare the audio stream for "${track.title}" (${resp.status})`,
+        );
+      }
+      const body = (await resp.json()) as { link?: string };
+      if (!body.link) {
+        throw new HttpsError("internal", "Dropbox returned no streaming link");
+      }
+      return {
+        trackTitle: track.title,
+        versionId: track.versionId,
+        versionLabel: track.versionLabel,
+        durationSeconds: track.durationSeconds,
+        peaks: track.peaks,
+        streamUrl: body.link,
+      };
+    }),
+  );
+
+  await snap.ref.update({ viewCount: FieldValue.increment(1) });
+
+  return {
+    projectName: link.projectName,
+    projectKind: link.projectKind,
+    tracks,
+  };
+});
+
+/**
+ * Guest comment write for a track within an album link — mirrors
+ * postShareLinkComment, but re-validates against `albumShareLinks/{token}`
+ * and additionally checks that `versionId` is actually one of the link's
+ * tracks (a guest must not be able to post against an arbitrary versionId
+ * just because they hold SOME valid album token).
+ */
+export const postAlbumShareLinkComment = onCall({ region: REGION }, async (request) => {
+  const token = requireString(request.data?.token, "token", 100);
+  const versionId = requireString(request.data?.versionId, "versionId", 100);
+  const displayName = requireString(request.data?.displayName, "displayName", 80);
+  const text = requireString(request.data?.text, "text", 1000);
+  const timestamp = Number(request.data?.timestampSeconds);
+  if (!Number.isFinite(timestamp) || timestamp < 0) {
+    throw new HttpsError("invalid-argument", "invalid timestamp");
+  }
+
+  const snap = await db.doc(`albumShareLinks/${token}`).get();
+  if (!snap.exists) throw new HttpsError("not-found", "this link does not exist");
+  const link = snap.data() as AlbumShareLinkDoc;
+  if (link.revoked) throw new HttpsError("permission-denied", "this link has been revoked");
+  if (!link.tracks.some((t) => t.versionId === versionId)) {
+    throw new HttpsError("invalid-argument", "versionId is not part of this album link");
+  }
+
+  await db.collection("comments").add({
+    versionId,
+    ownerUid: link.ownerUid,
+    shareToken: token,
+    timestampInTrackSeconds: timestamp,
+    authorType: "guest",
+    authorDisplayName: displayName,
+    text,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  return { ok: true };
+});

@@ -22,6 +22,16 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Whole-project ("share this entire EP/album") links — same pattern as
+    // shareLinks above, just for a project's whole track list. Created via
+    // createAlbumShareLink / revoked via revokeAlbumShareLink (Admin SDK).
+    // Guests never read these directly — they go through
+    // getAlbumShareLinkPlaybackInfo, which re-checks revocation every call.
+    match /albumShareLinks/{token} {
+      allow read: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+      allow write: if false;
+    }
+
     // Timestamped comments, always pinned to a specific versionId (an
     // unguessable UUID — queries filter on it). Reads are open to any
     // signed-in identity including anonymous guests, which is what enables

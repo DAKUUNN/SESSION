@@ -37,6 +37,14 @@ export interface ShareLinkSummary {
   viewCount: number;
 }
 
+export interface AlbumShareLinkSummary {
+  token: string;
+  url: string;
+  projectName: string;
+  revoked: boolean;
+  viewCount: number;
+}
+
 const createShareLinkFn = httpsCallable<
   {
     trackTitle: string;
@@ -59,8 +67,35 @@ const storeDropboxTokenFn = httpsCallable<{ refreshToken: string }, { ok: boolea
   "storeDropboxToken",
 );
 
+const createAlbumShareLinkFn = httpsCallable<
+  {
+    projectName: string;
+    projectKind: string;
+    tracks: {
+      title: string;
+      versionId: string;
+      versionLabel: string;
+      dropboxPath: string;
+      durationSeconds: number;
+      peaks: number[];
+    }[];
+  },
+  { token: string }
+>(functions, "createAlbumShareLink");
+
+const revokeAlbumShareLinkFn = httpsCallable<{ token: string }, { ok: boolean }>(
+  functions,
+  "revokeAlbumShareLink",
+);
+
 export function shareUrlFor(token: string): string {
   return `${SHARE_BASE_URL}/s/${token}`;
+}
+
+/** Guest-facing URL for a whole-project link — `/a/` distinguishes it from
+ *  the single-track `/s/` links so the guest SPA can tell them apart by path. */
+export function albumShareUrlFor(token: string): string {
+  return `${SHARE_BASE_URL}/a/${token}`;
 }
 
 export async function storeDropboxToken(refreshToken: string): Promise<void> {
@@ -99,6 +134,43 @@ export async function listShareLinks(
     token: d.id,
     url: shareUrlFor(d.id),
     versionLabel: String(d.get("versionLabel") ?? ""),
+    revoked: Boolean(d.get("revoked")),
+    viewCount: Number(d.get("viewCount") ?? 0),
+  }));
+}
+
+export async function createAlbumShareLink(input: {
+  projectName: string;
+  projectKind: string;
+  tracks: {
+    title: string;
+    versionId: string;
+    versionLabel: string;
+    dropboxPath: string;
+    durationSeconds: number;
+    peaks: number[];
+  }[];
+}): Promise<string> {
+  const result = await createAlbumShareLinkFn(input);
+  return result.data.token;
+}
+
+export async function revokeAlbumShareLink(token: string): Promise<void> {
+  await revokeAlbumShareLinkFn({ token });
+}
+
+/** All of the owner's whole-project links (no versionId to filter by here —
+ *  an album link isn't pinned to one version). */
+export async function listAlbumShareLinks(
+  ownerUid: string,
+): Promise<AlbumShareLinkSummary[]> {
+  const snapshot = await getDocs(
+    query(collection(db, "albumShareLinks"), where("ownerUid", "==", ownerUid)),
+  );
+  return snapshot.docs.map((d) => ({
+    token: d.id,
+    url: albumShareUrlFor(d.id),
+    projectName: String(d.get("projectName") ?? ""),
     revoked: Boolean(d.get("revoked")),
     viewCount: Number(d.get("viewCount") ?? 0),
   }));

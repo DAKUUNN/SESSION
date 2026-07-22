@@ -1,0 +1,46 @@
+.album-share-modal__track-count {
+  width: fit-content;
+}
+
+.album-share-modal__tracklist {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.album-share-modal__track {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+}
+
+.album-share-modal__track + .album-share-modal__track {
+  border-top: 1px solid var(--border-soft);
+}
+
+.album-share-modal__track-index {
+  flex-shrink: 0;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.album-share-modal__track-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.album-share-modal__track-version {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  font-size: 10.5px;
+}
