@@ -14,16 +14,10 @@ import { NewProjectModal, type NewProjectModalResult } from "./components/NewPro
 import { ImportReviewModal } from "./components/ImportReviewModal";
 import "./App.css";
 
-const AUDIO_EXTENSIONS = ["mp3", "wav", "aiff", "flac", "m4a", "aac"];
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp"];
 
 function favoriteKey(trackId: string, versionId?: string) {
   return `${trackId}::${versionId ?? "_"}`;
-}
-
-function nameFromPath(path: string): string {
-  const base = path.split(/[/\\]/).pop() ?? path;
-  return base.replace(/\.[^.]+$/, "");
 }
 
 function App() {
@@ -137,34 +131,6 @@ function App() {
         return next;
       });
     });
-  }, []);
-
-  const runImportFlow = useCallback(async (existingProjectId?: string) => {
-    setImportBusy(true);
-    try {
-      const selection = await open({
-        multiple: true,
-        filters: [{ name: "Audio", extensions: AUDIO_EXTENSIONS }],
-      });
-      const paths = Array.isArray(selection) ? selection : selection ? [selection] : [];
-      if (paths.length === 0) return;
-
-      let projectId = existingProjectId;
-      if (!projectId) {
-        const project = await api.createProject(nameFromPath(paths[0]), "single");
-        setProjects((prev) => [...prev, project]);
-        projectId = project.id;
-      }
-
-      await api.importLocalFiles(projectId, paths);
-      setSelectedProjectId(projectId);
-      const detail = await api.getProjectDetail(projectId);
-      setProjectDetail(detail);
-    } catch {
-      /* user cancelled the dialog, or the backend isn't ready yet */
-    } finally {
-      setImportBusy(false);
-    }
   }, []);
 
   const handleOpenNewProjectModal = useCallback(() => {
@@ -337,7 +303,7 @@ function App() {
   const mainContent = useMemo(() => {
     if (!projectsLoaded) return null;
     if (!hasProjects) {
-      return <EmptyState onImport={() => runImportFlow()} busy={importBusy} />;
+      return <EmptyState onImport={handleOpenNewProjectModal} busy={importBusy} />;
     }
     if (!projectDetail) return null;
     return (
@@ -360,7 +326,7 @@ function App() {
     projectsLoaded,
     hasProjects,
     importBusy,
-    runImportFlow,
+    handleOpenNewProjectModal,
     projectDetail,
     handleChangeCoverStyle,
     isFavorite,
