@@ -2,15 +2,20 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { CoverStyle, Playlist, Project } from "@session/shared-types";
 import { api, type ProjectDetail } from "./lib/api";
+import { groupFilesByBaseName } from "./lib/grouping";
+import type { ImportGroup } from "./lib/grouping";
 import { usePlayer } from "./hooks/usePlayer";
 import { Titlebar } from "./components/Titlebar";
 import { Sidebar } from "./components/Sidebar";
 import { MainPanel } from "./components/MainPanel";
 import { PlayerBar } from "./components/PlayerBar";
 import { EmptyState } from "./components/EmptyState";
+import { NewProjectModal, type NewProjectModalResult } from "./components/NewProjectModal";
+import { ImportReviewModal } from "./components/ImportReviewModal";
 import "./App.css";
 
 const AUDIO_EXTENSIONS = ["mp3", "wav", "aiff", "flac", "m4a", "aac"];
+const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp"];
 
 function favoriteKey(trackId: string, versionId?: string) {
   return `${trackId}::${versionId ?? "_"}`;
@@ -32,6 +37,14 @@ function App() {
 
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [importBusy, setImportBusy] = useState(false);
+
+  // New/Edit Project modal — same surface for both flows (see NewProjectModal).
+  const [showProjectModal, setShowProjectModal] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [projectModalBusy, setProjectModalBusy] = useState(false);
+
+  // Drag-dropped (or otherwise grouped) files awaiting review before import.
+  const [pendingImportGroups, setPendingImportGroups] = useState<ImportGroup[] | null>(null);
 
   const player = usePlayer();
 
@@ -154,6 +167,159 @@ function App() {
     }
   }, []);
 
+  const handleOpenNewProjectModal = useCallback(() => {
+    setEditingProject(null);
+    setShowProjectModal(true);
+  }, []);
+
+  const handleOpenEditProjectModal = useCallback(() => {
+    if (!projectDetail) return;
+    setEditingProject(projectDetail.project);
+    setShowProjectModal(true);
+  }, [projectDetail]);
+
+  const handleCloseProjectModal = useCallback(() => {
+    setShowProjectModal(false);
+    setEditingProject(null);
+  }, []);
+
+  const handleSubmitProjectModal = useCallback(
+    async (result: NewProjectModalResult) => {
+      setProjectModalBusy(true);
+      try {
+        if (editingProject) {
+          // Edit path. The cover is genuinely persisted via
+          // set_project_cover_image. Name/kind have no backend
+          // rename/update-kind command yet, so those two are applied as a
+          // session-only optimistic UI update — a known gap, documented in
+          // the PR summary, rather than silently inventing an endpoint.
+          const projectId = editingProject.id;
+          if (result.coverPath) {
+            await api.setProjectCoverImage(projectId, "local", result.coverPath).catch(() => {});
+          }
+          const coverImage = result.coverPath
+            ? { source: "local" as const, path: result.coverPath }
+            : editingProject.coverImage;
+          setProjects((prev) =>
+            prev.map((p) =>
+              p.id === projectId ? { ...p, name: result.name, kind: result.kind, coverImage } : p,
+            ),
+          );
+          setProjectDetail((prev) =>
+            prev && prev.project.id === projectId
+              ? { ...prev, project: { ...prev.project, name: result.name, kind: result.kind, coverImage } }
+              : prev,
+          );
+        } else {
+          const project = await api.createProject(result.name, result.kind);
+          if (result.coverPath) {
+            await api.setProjectCoverImage(project.id, "local", result.coverPath).catch(() => {});
+          }
+          const coverImage = result.coverPath
+            ? { source: "local" as const, path: result.coverPath }
+            : project.coverImage;
+          setProjects((prev) => [...prev, { ...project, coverImage }]);
+          setSelectedProjectId(project.id);
+        }
+      } catch {
+        /* backend not ready yet — the modal simply closes without effect */
+      } finally {
+        setProjectModalBusy(false);
+        setShowProjectModal(false);
+        setEditingProject(null);
+      }
+    },
+    [editingProject],
+  );
+
+  const handleImportPaths = useCallback(
+    (paths: string[]) => {
+      if (!selectedProjectId || paths.length === 0) return;
+      setPendingImportGroups(groupFilesByBaseName(paths));
+    },
+    [selectedProjectId],
+  );
+
+  const handleCancelImportReview = useCallback(() => {
+    setPendingImportGroups(null);
+  }, []);
+
+  const handleConfirmImportReview = useCallback(
+    async (groups: ImportGroup[]) => {
+      if (!selectedProjectId) return;
+      setImportBusy(true);
+      try {
+        await api.importGroupedFiles(selectedProjectId, groups);
+        const detail = await api.getProjectDetail(selectedProjectId);
+        setProjectDetail(detail);
+      } catch {
+        /* backend not ready yet, or nothing to import */
+      } finally {
+        setImportBusy(false);
+        setPendingImportGroups(null);
+      }
+    },
+    [selectedProjectId],
+  );
+
+  const handleAddProjectCover = useCallback(async () => {
+    if (!selectedProjectId) return;
+    try {
+      const selection = await open({
+        multiple: false,
+        filters: [{ name: "Image", extensions: IMAGE_EXTENSIONS }],
+      });
+      const path = Array.isArray(selection) ? selection[0] : selection;
+      if (!path) return;
+      const coverImage = { source: "local" as const, path };
+      setProjectDetail((prev) =>
+        prev ? { ...prev, project: { ...prev.project, coverImage } } : prev,
+      );
+      setProjects((prev) =>
+        prev.map((p) => (p.id === selectedProjectId ? { ...p, coverImage } : p)),
+      );
+      await api.setProjectCoverImage(selectedProjectId, "local", path);
+    } catch {
+      /* user cancelled the dialog, or the backend isn't ready yet */
+    }
+  }, [selectedProjectId]);
+
+  const handleAddTrackCover = useCallback(async (trackId: string) => {
+    try {
+      const selection = await open({
+        multiple: false,
+        filters: [{ name: "Image", extensions: IMAGE_EXTENSIONS }],
+      });
+      const path = Array.isArray(selection) ? selection[0] : selection;
+      if (!path) return;
+      const coverImage = { source: "local" as const, path };
+      setProjectDetail((prev) =>
+        prev
+          ? { ...prev, tracks: prev.tracks.map((t) => (t.id === trackId ? { ...t, coverImage } : t)) }
+          : prev,
+      );
+      await api.setTrackCoverImage(trackId, "local", path);
+    } catch {
+      /* user cancelled the dialog, or the backend isn't ready yet */
+    }
+  }, []);
+
+  const handleSwitchDefaultVersion = useCallback((trackId: string, versionId: string) => {
+    // Optimistic: reflect the new default immediately, matching the
+    // favorites/cover-style pattern above.
+    setProjectDetail((prev) =>
+      prev
+        ? {
+            ...prev,
+            tracks: prev.tracks.map((t) =>
+              t.id === trackId ? { ...t, defaultVersionId: versionId } : t,
+            ),
+          }
+        : prev,
+    );
+    api.setDefaultVersion(trackId, versionId).catch(() => {});
+  }, []);
+
   const handleNewPlaylist = useCallback(() => {
     const name = window.prompt("Playlist name");
     if (!name) return;
@@ -183,6 +349,11 @@ function App() {
         isFavorite={isFavorite}
         onToggleFavorite={handleToggleFavorite}
         player={player}
+        onSwitchDefaultVersion={handleSwitchDefaultVersion}
+        onImportPaths={handleImportPaths}
+        onEditProject={handleOpenEditProjectModal}
+        onAddProjectCover={handleAddProjectCover}
+        onAddTrackCover={handleAddTrackCover}
       />
     );
   }, [
@@ -195,6 +366,11 @@ function App() {
     isFavorite,
     handleToggleFavorite,
     player,
+    handleSwitchDefaultVersion,
+    handleImportPaths,
+    handleOpenEditProjectModal,
+    handleAddProjectCover,
+    handleAddTrackCover,
   ]);
 
   return (
@@ -205,7 +381,7 @@ function App() {
           projects={projects}
           selectedProjectId={selectedProjectId}
           onSelectProject={handleSelectProject}
-          onNewProject={() => runImportFlow()}
+          onNewProject={handleOpenNewProjectModal}
           playlists={playlists}
           selectedPlaylistId={selectedPlaylistId}
           onSelectPlaylist={setSelectedPlaylistId}
@@ -222,6 +398,24 @@ function App() {
         volume={player.volume}
         onVolumeChange={player.setVolume}
       />
+
+      {showProjectModal ? (
+        <NewProjectModal
+          project={editingProject}
+          busy={projectModalBusy}
+          onClose={handleCloseProjectModal}
+          onSubmit={handleSubmitProjectModal}
+        />
+      ) : null}
+
+      {pendingImportGroups ? (
+        <ImportReviewModal
+          initialGroups={pendingImportGroups}
+          busy={importBusy}
+          onClose={handleCancelImportReview}
+          onConfirm={handleConfirmImportReview}
+        />
+      ) : null}
     </div>
   );
 }

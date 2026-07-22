@@ -1,0 +1,67 @@
+.import-review {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.import-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  background: var(--surface-2);
+}
+
+.import-group__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  width: 100%;
+}
+
+.import-group__versions {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.import-version-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.import-version-row__radio {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+}
+
+.import-version-row__radio:hover {
+  border-color: var(--text-dim);
+}
+
+.import-version-row__radio.is-selected {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.import-version-row__label {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  padding: 6px 8px;
+}
+
+.import-version-row__filename {
+  flex-shrink: 0;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+}

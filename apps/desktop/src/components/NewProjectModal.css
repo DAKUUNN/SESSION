@@ -1,0 +1,50 @@
+.new-project-form__top {
+  display: flex;
+  gap: 16px;
+}
+
+.new-project-form__cover-clickable {
+  flex-shrink: 0;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.new-project-form__cover-clickable:hover {
+  opacity: 0.85;
+}
+
+.new-project-form__fields {
+  flex: 1;
+  min-width: 0;
+}
+
+.kind-picker {
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.kind-picker__btn {
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  border-right: 1px solid var(--border);
+}
+
+.kind-picker__btn:last-child {
+  border-right: none;
+}
+
+.kind-picker__btn:hover {
+  color: var(--text);
+}
+
+.kind-picker__btn.is-selected {
+  background: var(--surface-2);
+  color: var(--accent);
+}

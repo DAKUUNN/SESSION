@@ -88,6 +88,34 @@ export function usePlayer() {
     [status.isPlaying],
   );
 
+  /**
+   * Switches the master/default version of the track that's currently
+   * loaded, continuing playback from `resumeSeconds` instead of restarting
+   * from zero (unlike `loadAndPlay`, which always resets position). If the
+   * track was playing, playback resumes after the load; if it was paused,
+   * it stays paused at that position on the new version.
+   */
+  const switchVersion = useCallback(
+    async (info: NowPlaying, path: string, resumeSeconds: number, resumePlaying: boolean) => {
+      setNowPlaying(info);
+      setStatus((prev) => ({
+        ...prev,
+        positionSeconds: resumeSeconds,
+        isPlaying: resumePlaying,
+      }));
+      try {
+        await api.audioLoad(path);
+        await api.audioSeek(resumeSeconds);
+        if (resumePlaying) {
+          await api.audioPlay();
+        }
+      } catch {
+        /* backend not ready — UI still reflects the selection */
+      }
+    },
+    [],
+  );
+
   const togglePlay = useCallback(async () => {
     if (!nowPlayingRef.current) return;
     try {
@@ -108,7 +136,7 @@ export function usePlayer() {
     api.audioSetVolume(v).catch(() => {});
   }, []);
 
-  return { status, nowPlaying, volume, loadAndPlay, togglePlay, seek, setVolume };
+  return { status, nowPlaying, volume, loadAndPlay, switchVersion, togglePlay, seek, setVolume };
 }
 
 export type PlayerApi = ReturnType<typeof usePlayer>;

@@ -21,6 +21,17 @@ export interface ProjectDetail {
   versionsByTrack: Record<string, Version[]>;
 }
 
+export interface ImportGroupVersionInput {
+  label: string;
+  path: string;
+}
+
+export interface ImportGroupInput {
+  title: string;
+  versions: ImportGroupVersionInput[];
+  defaultVersionIndex: number;
+}
+
 export interface PlaybackStatus {
   positionSeconds: number;
   durationSeconds: number;
@@ -36,11 +47,20 @@ export const api = {
   setProjectCoverStyle: (projectId: string, style: string) =>
     invoke<void>("set_project_cover_style", { projectId, style }),
 
+  setProjectCoverImage: (projectId: string, source: string, path: string) =>
+    invoke<void>("set_project_cover_image", { projectId, source, path }),
+
+  setTrackCoverImage: (trackId: string, source: string, path: string) =>
+    invoke<void>("set_track_cover_image", { trackId, source, path }),
+
   getProjectDetail: (projectId: string) =>
     invoke<ProjectDetail>("get_project_detail", { projectId }),
 
   importLocalFiles: (projectId: string, filePaths: string[]) =>
     invoke<Track[]>("import_local_files", { projectId, filePaths }),
+
+  importGroupedFiles: (projectId: string, groups: ImportGroupInput[]) =>
+    invoke<Track[]>("import_grouped_files", { projectId, groups }),
 
   listVersions: (trackId: string) =>
     invoke<Version[]>("list_versions", { trackId }),

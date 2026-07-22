@@ -1,9 +1,33 @@
 .main-panel {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* Drag-and-drop "drop here" overlay, shown while an OS-level file drag is
+   hovering over the panel (see useFileDrop). */
+.main-panel__drop-overlay {
+  position: absolute;
+  inset: 8px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius-md);
+  background: rgba(79, 215, 196, 0.08);
+  pointer-events: none;
+}
+
+.main-panel__drop-overlay-text {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
 }
 
 .main-panel__toolbar {
@@ -77,6 +101,12 @@
   margin-bottom: 6px;
 }
 
+.hero__title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
 .hero__title {
   font-family: var(--font-display);
   font-weight: 700;
@@ -84,6 +114,28 @@
   line-height: 1.08;
   color: var(--text);
   overflow-wrap: anywhere;
+}
+
+.hero__edit-btn {
+  flex-shrink: 0;
+  border: none;
+  color: var(--text-faint);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.hero:hover .hero__edit-btn,
+.hero__edit-btn:focus-visible {
+  opacity: 1;
+}
+
+.hero__edit-btn:hover {
+  color: var(--accent);
+}
+
+.hero__edit-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 .hero__meta {
@@ -131,11 +183,39 @@
   padding: 24px 28px 10px;
 }
 
+.simple-header__title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .simple-header__title {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 22px;
   color: var(--text);
+}
+
+.simple-header__edit-btn {
+  flex-shrink: 0;
+  border: none;
+  color: var(--text-faint);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.simple-header:hover .simple-header__edit-btn,
+.simple-header__edit-btn:focus-visible {
+  opacity: 1;
+}
+
+.simple-header__edit-btn:hover {
+  color: var(--accent);
+}
+
+.simple-header__edit-btn svg {
+  width: 12px;
+  height: 12px;
 }
 
 .simple-header__count {

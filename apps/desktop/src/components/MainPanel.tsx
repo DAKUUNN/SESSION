@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import type { CoverStyle, Project, Track, Version } from "@session/shared-types";
 import { CoverThumb } from "./CoverThumb";
 import { TrackRow } from "./TrackRow";
-import { PauseIcon, PlayIcon, ShareIcon, ShuffleIcon } from "./icons";
+import { EditIcon, PauseIcon, PlayIcon, ShareIcon, ShuffleIcon } from "./icons";
 import { formatDuration, formatRelativeTime } from "../lib/format";
 import type { PlayerApi } from "../hooks/usePlayer";
+import { useFileDrop } from "../hooks/useFileDrop";
 import "./MainPanel.css";
 
 function defaultVersionFor(track: Track, versionsByTrack: Record<string, Version[]>) {
@@ -20,6 +21,16 @@ interface MainPanelProps {
   isFavorite: (trackId: string, versionId?: string) => boolean;
   onToggleFavorite: (trackId: string, versionId?: string) => void;
   player: PlayerApi;
+  /** Persists (and optimistically reflects) a track's new default/master version. */
+  onSwitchDefaultVersion: (trackId: string, versionId: string) => void;
+  /** Audio files dropped from Finder onto the panel, already filtered to audio extensions. */
+  onImportPaths: (paths: string[]) => void;
+  /** Opens the New/Edit Project modal in edit mode for this project. */
+  onEditProject: () => void;
+  /** Opens a native image picker and sets the project's hero cover. */
+  onAddProjectCover: () => void;
+  /** Opens a native image picker and sets one track's own cover (individual mode). */
+  onAddTrackCover: (trackId: string) => void;
 }
 
 export function MainPanel({
@@ -30,8 +41,15 @@ export function MainPanel({
   isFavorite,
   onToggleFavorite,
   player,
+  onSwitchDefaultVersion,
+  onImportPaths,
+  onEditProject,
+  onAddProjectCover,
+  onAddTrackCover,
 }: MainPanelProps) {
-  const { nowPlaying, status, loadAndPlay, seek } = player;
+  const { nowPlaying, status, loadAndPlay, switchVersion, seek } = player;
+
+  const dropState = useFileDrop({ onDropFiles: onImportPaths });
 
   const totalDuration = useMemo(
     () =>
@@ -75,8 +93,46 @@ export function MainPanel({
     activate(pick);
   }
 
+  // Switching a track's master version: if that exact track is the one
+  // currently loaded in the player, continue playback seamlessly from the
+  // same position (via usePlayer's switchVersion) instead of restarting.
+  // Either way, the new default is persisted (and optimistically reflected)
+  // through onSwitchDefaultVersion.
+  const handleSwitchVersion = useCallback(
+    (track: Track, versionId: string) => {
+      const versions = versionsByTrack[track.id] ?? [];
+      const target = versions.find((v) => v.id === versionId);
+      if (!target || target.id === track.defaultVersionId) return;
+
+      if (nowPlaying?.trackId === track.id) {
+        const resumeSeconds = status.positionSeconds;
+        const resumePlaying = status.isPlaying;
+        switchVersion(
+          {
+            trackId: track.id,
+            versionId: target.id,
+            title: track.title,
+            versionLabel: target.label,
+            cover: track.coverImage ?? project.coverImage,
+          },
+          target.file.path,
+          resumeSeconds,
+          resumePlaying,
+        );
+      }
+
+      onSwitchDefaultVersion(track.id, target.id);
+    },
+    [versionsByTrack, nowPlaying, status, switchVersion, project.coverImage, onSwitchDefaultVersion],
+  );
+
   return (
     <section className="main-panel">
+      {dropState === "hover" ? (
+        <div className="main-panel__drop-overlay">
+          <div className="main-panel__drop-overlay-text">Drop to import</div>
+        </div>
+      ) : null}
       <div className="main-panel__toolbar">
         <div className="segmented">
           <button
@@ -100,11 +156,25 @@ export function MainPanel({
         {project.coverStyle === "album" ? (
           <div className="hero">
             <div className="hero__cover">
-              <CoverThumb cover={project.coverImage} size={148} showAddAffordance />
+              <CoverThumb
+                cover={project.coverImage}
+                size={148}
+                showAddAffordance={!project.coverImage?.path}
+                onAdd={onAddProjectCover}
+              />
             </div>
             <div className="hero__info">
               <div className="hero__eyebrow">{project.kind}</div>
-              <h1 className="hero__title">{project.name}</h1>
+              <div className="hero__title-row">
+                <h1 className="hero__title">{project.name}</h1>
+                <button
+                  className="icon-btn hero__edit-btn"
+                  onClick={onEditProject}
+                  title="Edit project"
+                >
+                  <EditIcon />
+                </button>
+              </div>
               <div className="hero__meta tabular">
                 {tracks.length} track{tracks.length === 1 ? "" : "s"},{" "}
                 {formatDuration(totalDuration)}, updated {formatRelativeTime(project.updatedAt)}
@@ -124,7 +194,16 @@ export function MainPanel({
           </div>
         ) : (
           <div className="simple-header">
-            <div className="simple-header__title">{project.name}</div>
+            <div className="simple-header__title-row">
+              <div className="simple-header__title">{project.name}</div>
+              <button
+                className="icon-btn simple-header__edit-btn"
+                onClick={onEditProject}
+                title="Edit project"
+              >
+                <EditIcon />
+              </button>
+            </div>
             <div className="simple-header__count">
               {tracks.length} track{tracks.length === 1 ? "" : "s"}
             </div>
@@ -143,6 +222,9 @@ export function MainPanel({
                   key={track.id}
                   track={track}
                   version={version}
+                  versions={versionsByTrack[track.id] ?? []}
+                  onSwitchVersion={(versionId) => handleSwitchVersion(track, versionId)}
+                  onAddCover={() => onAddTrackCover(track.id)}
                   index={project.coverStyle === "album" ? i + 1 : undefined}
                   isFavorite={isFavorite(track.id, version?.id)}
                   onToggleFavorite={() => onToggleFavorite(track.id, version?.id)}

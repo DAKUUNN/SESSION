@@ -32,6 +32,13 @@ function getPeaks(path: string): Promise<number[]> {
 
 interface WaveformPlayerProps {
   path: string;
+  /**
+   * Not used yet — kept alongside `path` so that when per-version comments
+   * land later, this component already has the version identity it'll need
+   * to scope comments to (switching versions should only show that
+   * version's comments).
+   */
+  versionId?: string;
   positionSeconds: number;
   durationSeconds: number;
   onSeek: (seconds: number) => void;
