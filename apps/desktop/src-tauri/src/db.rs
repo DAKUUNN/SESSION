@@ -587,6 +587,70 @@ pub fn import_grouped_files(
     Ok(created_tracks)
 }
 
+/// Dropbox-flavored variant of the track+version insert done by
+/// `import_local_files`: creates one Track + one "Original" Version for a
+/// single file that has already been downloaded to `local_cache_path`, but
+/// with the version's `file_source` set to `"dropbox"` instead of
+/// `"local"`. Called from `dropbox.rs::dropbox_import_file` after it has
+/// downloaded the file from the Dropbox content API. Not a `#[tauri::command]`
+/// itself — `dropbox_import_file` is the command, this is its DB half.
+pub fn insert_dropbox_track(
+    conn: &Connection,
+    project_id: &str,
+    file_name: &str,
+    local_cache_path: &str,
+    dropbox_rev: &str,
+    duration_seconds: f64,
+) -> Result<Track, String> {
+    let title = std::path::Path::new(file_name)
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| file_name.to_string());
+
+    let fingerprint = local_fingerprint(local_cache_path);
+
+    let next_sort_order: i64 = conn
+        .query_row(
+            "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM tracks WHERE project_id = ?1",
+            params![project_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let track_id = uuid::Uuid::new_v4().to_string();
+    let version_id = uuid::Uuid::new_v4().to_string();
+    let created_at = chrono::Utc::now().to_rfc3339();
+
+    conn.execute(
+        "INSERT INTO tracks (id, project_id, title, default_version_id, sort_order) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![track_id, project_id, title, version_id, next_sort_order],
+    )
+    .map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "INSERT INTO versions (id, track_id, label, file_source, file_path, file_rev, file_fingerprint, duration_seconds, created_at)
+         VALUES (?1, ?2, 'Original', 'dropbox', ?3, ?4, ?5, ?6, ?7)",
+        params![
+            version_id,
+            track_id,
+            local_cache_path,
+            dropbox_rev,
+            fingerprint,
+            duration_seconds,
+            created_at
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(Track {
+        id: track_id,
+        project_id: project_id.to_string(),
+        title,
+        default_version_id: Some(version_id),
+        cover_image: None,
+    })
+}
+
 #[tauri::command]
 pub fn list_versions(state: State<DbState>, track_id: String) -> Result<Vec<Version>, String> {
     let conn = state.0.lock();
