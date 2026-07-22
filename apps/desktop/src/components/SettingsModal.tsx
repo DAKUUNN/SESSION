@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type DropboxAccountInfo, type DropboxFileEntry } from "../lib/api";
 import { formatFileSize } from "../lib/format";
+import type { AccountApi } from "../hooks/useAccount";
 import { Modal } from "./Modal";
 import { RefreshIcon } from "./icons";
 import "./SettingsModal.css";
@@ -28,14 +29,172 @@ interface SettingsModalProps {
   selectedProjectId: string | null;
   /** Called after any successful import so the caller can refresh the current project's detail. */
   onImported: () => void;
+  /** Account + licensing state, owned app-wide by App.tsx's useAccount hook. */
+  account: AccountApi;
+}
+
+/** Account (Firebase magic-link sign-in) section. */
+function AccountSection({ account }: { account: AccountApi }) {
+  const [email, setEmail] = useState("");
+  const { user, authLoaded, signInPhase, signInError, signIn, signOutUser } = account;
+
+  if (!authLoaded) {
+    return (
+      <div className="settings-section">
+        <div className="settings-section__head">
+          <span className="mono-label">Account</span>
+        </div>
+        <div className="settings-status">Checking account…</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="settings-section">
+      <div className="settings-section__head">
+        <span className="mono-label">Account</span>
+      </div>
+      {user ? (
+        <div className="settings-account__row">
+          <div className="settings-account__identity">
+            Signed in as <strong>{user.email}</strong>
+          </div>
+          <button type="button" className="btn btn--secondary" onClick={signOutUser}>
+            Sign out
+          </button>
+        </div>
+      ) : (
+        <div>
+          <p className="settings-copy">
+            Sign in to carry your license across devices — once your license is saved to your
+            account, signing in on another device (including iOS) unlocks Session there too.
+          </p>
+          <form
+            className="settings-inline-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              signIn(email);
+            }}
+          >
+            <input
+              type="email"
+              className="settings-input"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={signInPhase !== "idle"}
+            />
+            <button
+              type="submit"
+              className="btn btn--primary"
+              disabled={signInPhase !== "idle" || !email.trim()}
+            >
+              {signInPhase === "sending"
+                ? "Sending link…"
+                : signInPhase === "waitingForLink"
+                  ? "Check your inbox…"
+                  : "Send sign-in link"}
+            </button>
+          </form>
+          {signInPhase === "waitingForLink" ? (
+            <div className="settings-hint">
+              We emailed you a sign-in link. Open it on this computer — Session will finish
+              signing you in automatically.
+            </div>
+          ) : null}
+          {signInError ? <div className="settings-error">{signInError}</div> : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** License (Lemon Squeezy key) section. */
+function LicenseSection({ account }: { account: AccountApi }) {
+  const [keyInput, setKeyInput] = useState("");
+  const { license, licenseLoaded, licenseBusy, licenseError, activateLicense, deactivateLicense } =
+    account;
+
+  if (!licenseLoaded) {
+    return (
+      <div className="settings-section">
+        <div className="settings-section__head">
+          <span className="mono-label">License</span>
+        </div>
+        <div className="settings-status">Checking license…</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="settings-section">
+      <div className="settings-section__head">
+        <span className="mono-label">License</span>
+      </div>
+      {license ? (
+        <div className="settings-account__row">
+          <div className="settings-account__identity">
+            Licensed{license.customerEmail ? (
+              <>
+                {" "}
+                to <strong>{license.customerEmail}</strong>
+              </>
+            ) : null}{" "}
+            <span className="settings-license-status tabular">[{license.status.toUpperCase()}]</span>
+          </div>
+          <button
+            type="button"
+            className="btn btn--secondary"
+            onClick={deactivateLicense}
+            disabled={licenseBusy}
+          >
+            {licenseBusy ? "Removing…" : "Deactivate"}
+          </button>
+        </div>
+      ) : (
+        <div>
+          <p className="settings-copy">
+            Enter the license key from your purchase email. If you're signed in, the key is saved
+            to your account so your other devices unlock automatically.
+          </p>
+          <form
+            className="settings-inline-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              activateLicense(keyInput);
+              setKeyInput("");
+            }}
+          >
+            <input
+              type="text"
+              className="settings-input settings-input--mono"
+              placeholder="XXXX-XXXX-XXXX-XXXX"
+              value={keyInput}
+              onChange={(e) => setKeyInput(e.target.value)}
+              disabled={licenseBusy}
+              spellCheck={false}
+            />
+            <button
+              type="submit"
+              className="btn btn--primary"
+              disabled={licenseBusy || !keyInput.trim()}
+            >
+              {licenseBusy ? "Activating…" : "Activate"}
+            </button>
+          </form>
+        </div>
+      )}
+      {licenseError ? <div className="settings-error">{licenseError}</div> : null}
+    </div>
+  );
 }
 
 /**
- * Settings surface, currently just the Dropbox integration: connect/disconnect,
- * and browse + import from the app's scoped Dropbox app folder. Reuses the
- * shared Modal shell the same way NewProjectModal/ImportReviewModal do.
+ * Settings surface: account sign-in, license activation, and the Dropbox
+ * integration (connect/disconnect, browse + import from the app folder).
+ * Reuses the shared Modal shell the same way NewProjectModal does.
  */
-export function SettingsModal({ onClose, selectedProjectId, onImported }: SettingsModalProps) {
+export function SettingsModal({ onClose, selectedProjectId, onImported, account }: SettingsModalProps) {
   const [connection, setConnection] = useState<DropboxAccountInfo | null>(null);
   const [connectionLoaded, setConnectionLoaded] = useState(false);
   const [connectBusy, setConnectBusy] = useState(false);
@@ -187,6 +346,9 @@ export function SettingsModal({ onClose, selectedProjectId, onImported }: Settin
 
   return (
     <Modal title="Settings" onClose={onClose} width={600}>
+      <AccountSection account={account} />
+      <LicenseSection account={account} />
+
       <div className="settings-section">
         <div className="settings-section__head">
           <span className="mono-label">Dropbox</span>

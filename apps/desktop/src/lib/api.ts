@@ -51,6 +51,16 @@ export interface DropboxFileEntry {
   size: number;
 }
 
+export interface LicenseInfo {
+  key: string;
+  instanceId: string;
+  /** Lemon Squeezy license status: "active", "inactive", "expired", "disabled". */
+  status: string;
+  productName?: string | null;
+  customerEmail?: string | null;
+  activatedAt: string;
+}
+
 export const api = {
   listProjects: () => invoke<Project[]>("list_projects"),
 
@@ -122,4 +132,16 @@ export const api = {
       dropboxRev,
       fileName,
     }),
+
+  licenseActivate: (licenseKey: string) =>
+    invoke<LicenseInfo>("license_activate", { licenseKey }),
+  licenseGet: () => invoke<LicenseInfo | null>("license_get"),
+  licenseValidate: () => invoke<LicenseInfo>("license_validate"),
+  licenseDeactivate: () => invoke<void>("license_deactivate"),
+
+  /** Resolves with the full callback URL once the user clicks the emailed
+   *  sign-in link (or rejects after ~5 minutes). Call right after
+   *  `sendSignInLinkToEmail` so the loopback listener is already bound. */
+  authWaitForEmailLinkCallback: () =>
+    invoke<string>("auth_wait_for_email_link_callback"),
 };

@@ -5,6 +5,7 @@ import { api, type ProjectDetail } from "./lib/api";
 import { groupFilesByBaseName } from "./lib/grouping";
 import type { ImportGroup } from "./lib/grouping";
 import { usePlayer } from "./hooks/usePlayer";
+import { useAccount } from "./hooks/useAccount";
 import { Titlebar } from "./components/Titlebar";
 import { Sidebar } from "./components/Sidebar";
 import { MainPanel } from "./components/MainPanel";
@@ -45,6 +46,9 @@ function App() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   const player = usePlayer();
+  // Account + licensing lives app-wide (not inside the modal) so the license
+  // sync with Firestore runs on startup, not only when Settings is open.
+  const account = useAccount();
 
   // Initial data load. Every call is defensive: sibling agents are still
   // wiring up some of these commands, so a failure here should not crash
@@ -407,6 +411,7 @@ function App() {
           onClose={handleCloseSettings}
           selectedProjectId={selectedProjectId}
           onImported={handleDropboxImported}
+          account={account}
         />
       ) : null}
     </div>

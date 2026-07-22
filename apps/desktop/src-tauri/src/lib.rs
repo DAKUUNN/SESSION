@@ -1,6 +1,7 @@
 mod audio;
 mod db;
 mod dropbox;
+mod licensing;
 mod models;
 mod waveform;
 
@@ -53,6 +54,11 @@ pub fn run() {
             dropbox::dropbox_disconnect,
             dropbox::dropbox_list_app_folder,
             dropbox::dropbox_import_file,
+            licensing::license_activate,
+            licensing::license_get,
+            licensing::license_validate,
+            licensing::license_deactivate,
+            licensing::auth_wait_for_email_link_callback,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

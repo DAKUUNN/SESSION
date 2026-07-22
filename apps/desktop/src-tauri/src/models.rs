@@ -86,6 +86,22 @@ pub struct DropboxFileEntry {
     pub size: u64,
 }
 
+/// A locally activated Lemon Squeezy license. Stored (as JSON) in the OS
+/// keychain only — never in SQLite. The frontend mirrors the key into the
+/// user's Firestore doc so signing in on another device (e.g. iOS) can
+/// activate the same license there without an in-app purchase.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LicenseInfo {
+    pub key: String,
+    pub instance_id: String,
+    /// Lemon Squeezy license status: "active", "inactive", "expired", "disabled".
+    pub status: String,
+    pub product_name: Option<String>,
+    pub customer_email: Option<String>,
+    pub activated_at: String,
+}
+
 /// Full project detail bundle: the project plus its tracks and each track's versions,
 /// shaped so the frontend can render a project screen from one call.
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -18,12 +18,70 @@
   gap: 8px;
 }
 
-.settings-dropbox__copy {
+.settings-dropbox__copy,
+.settings-copy {
   color: var(--text-dim);
   font-size: 12.5px;
   line-height: 1.5;
   margin: 0 0 12px;
   max-width: 460px;
+}
+
+.settings-account__row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.settings-account__identity {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.settings-account__identity strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.settings-license-status {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+}
+
+.settings-inline-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 8px 10px;
+  outline: none;
+}
+
+.settings-input:focus-visible {
+  border-color: var(--accent);
+}
+
+.settings-input::placeholder {
+  color: var(--text-faint);
+}
+
+.settings-input--mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
 }
 
 .settings-dropbox__connected {
