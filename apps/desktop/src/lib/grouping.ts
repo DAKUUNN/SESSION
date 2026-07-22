@@ -38,7 +38,7 @@ const KEYWORD_ALTERNATION = VERSION_KEYWORDS.join("|");
 // extension), optionally preceded by a separator (" - ", "_", or plain
 // whitespace). Covers "Master", "Master v1", "Mix 2", "Demo", "v3", etc.
 const VERSION_SUFFIX_RE = new RegExp(
-  `(?:^|[\\s_-]+)((?:${KEYWORD_ALTERNATION})(?:[\\s_.]*v?\\.?\\s*\\d+)?|v\\.?\\s*\\d+)$`,
+  `(?:^|[\\s_-]+)((?:${KEYWORD_ALTERNATION})(?:[\\s_.-]*v?\\.?\\s*\\d+)?|v\\.?\\s*\\d+)$`,
   "i",
 );
 
@@ -60,10 +60,14 @@ function toTitleCase(s: string): string {
 
 /** Formats a matched version suffix "nicely", e.g. "master v1" -> "Master v1". */
 function formatVersionLabel(raw: string): string {
+  // Treat a literal "-" as a word separator too (e.g. "Master-1" -> "Master 1"),
+  // matching how underscores/spaces are already handled, so dash-delimited
+  // filenames don't leak a raw hyphen into the displayed label.
+  const dashesSpaced = raw.replace(/-/g, " ");
   // Insert a space between a letter and an immediately-adjacent digit (so
   // "mix2" -> "mix 2"), but leave "v1" / "v2" fused since that's the
   // desired fused form ("Master v1", not "Master v 1").
-  const spaced = raw.replace(/([a-zA-Z])(\d)/g, (m, letter: string, digit: string) =>
+  const spaced = dashesSpaced.replace(/([a-zA-Z])(\d)/g, (m, letter: string, digit: string) =>
     letter.toLowerCase() === "v" ? m : `${letter} ${digit}`,
   );
   return normalizeSeparators(spaced)
