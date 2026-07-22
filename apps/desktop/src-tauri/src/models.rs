@@ -21,6 +21,9 @@ pub struct Version {
     pub key: Option<String>,
     pub peak_data_path: Option<String>,
     pub created_at: String,
+    /// Path in the Dropbox app folder once this version has been uploaded
+    /// there (either imported from Dropbox, or uploaded for a share link).
+    pub dropbox_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

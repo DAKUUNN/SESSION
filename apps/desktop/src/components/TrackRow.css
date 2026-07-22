@@ -185,7 +185,8 @@
   color: var(--text-dim);
 }
 
-.favorite-btn {
+.favorite-btn,
+.track-share-btn {
   flex-shrink: 0;
   width: 22px;
   height: 22px;
@@ -193,6 +194,15 @@
   align-items: center;
   justify-content: center;
   color: var(--text-faint);
+}
+
+.track-share-btn:hover {
+  color: var(--accent);
+}
+
+.track-share-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 .favorite-btn:hover {

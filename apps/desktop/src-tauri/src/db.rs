@@ -80,6 +80,18 @@ pub fn init(app_data_dir: &std::path::Path) -> Result<Connection, String> {
         ",
     )
     .map_err(|e| e.to_string())?;
+
+    // Additive migration for pre-existing databases: versions gained a
+    // `dropbox_path` column (the app-folder path once a version has been
+    // uploaded/synced to Dropbox, needed for share links). SQLite has no
+    // ADD COLUMN IF NOT EXISTS, so tolerate the duplicate-column error.
+    if let Err(e) = conn.execute("ALTER TABLE versions ADD COLUMN dropbox_path TEXT", []) {
+        let msg = e.to_string();
+        if !msg.contains("duplicate column") {
+            return Err(msg);
+        }
+    }
+
     Ok(conn)
 }
 
@@ -135,7 +147,7 @@ fn track_from_row(row: &Row) -> rusqlite::Result<Track> {
 }
 
 /// Expects columns in order: id, track_id, label, file_source, file_path, file_rev,
-/// file_fingerprint, duration_seconds, bpm, key, peak_data_path, created_at.
+/// file_fingerprint, duration_seconds, bpm, key, peak_data_path, created_at, dropbox_path.
 fn version_from_row(row: &Row) -> rusqlite::Result<Version> {
     Ok(Version {
         id: row.get(0)?,
@@ -152,7 +164,35 @@ fn version_from_row(row: &Row) -> rusqlite::Result<Version> {
         key: row.get(9)?,
         peak_data_path: row.get(10)?,
         created_at: row.get(11)?,
+        dropbox_path: row.get(12)?,
     })
+}
+
+/// Fetches a single version by id — used by the Dropbox upload/share flow.
+pub fn get_version(conn: &Connection, version_id: &str) -> Result<Version, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, track_id, label, file_source, file_path, file_rev, file_fingerprint, duration_seconds, bpm, key, peak_data_path, created_at, dropbox_path
+             FROM versions WHERE id = ?1",
+        )
+        .map_err(|e| e.to_string())?;
+    stmt.query_row(params![version_id], version_from_row)
+        .map_err(|e| format!("version not found: {e}"))
+}
+
+/// Records where a version now lives in the Dropbox app folder (after upload).
+pub fn set_version_dropbox_location(
+    conn: &Connection,
+    version_id: &str,
+    dropbox_path: &str,
+    dropbox_rev: &str,
+) -> Result<(), String> {
+    conn.execute(
+        "UPDATE versions SET dropbox_path = ?1, file_rev = ?2 WHERE id = ?3",
+        params![dropbox_path, dropbox_rev, version_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 fn track_ids_for_project(conn: &Connection, project_id: &str) -> Result<Vec<String>, String> {
@@ -185,7 +225,7 @@ fn tracks_for_project(conn: &Connection, project_id: &str) -> Result<Vec<Track>,
 fn versions_for_track(conn: &Connection, track_id: &str) -> Result<Vec<Version>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, track_id, label, file_source, file_path, file_rev, file_fingerprint, duration_seconds, bpm, key, peak_data_path, created_at
+            "SELECT id, track_id, label, file_source, file_path, file_rev, file_fingerprint, duration_seconds, bpm, key, peak_data_path, created_at, dropbox_path
              FROM versions WHERE track_id = ?1 ORDER BY created_at",
         )
         .map_err(|e| e.to_string())?;
@@ -599,6 +639,7 @@ pub fn insert_dropbox_track(
     project_id: &str,
     file_name: &str,
     local_cache_path: &str,
+    dropbox_path: &str,
     dropbox_rev: &str,
     duration_seconds: f64,
 ) -> Result<Track, String> {
@@ -628,8 +669,8 @@ pub fn insert_dropbox_track(
     .map_err(|e| e.to_string())?;
 
     conn.execute(
-        "INSERT INTO versions (id, track_id, label, file_source, file_path, file_rev, file_fingerprint, duration_seconds, created_at)
-         VALUES (?1, ?2, 'Original', 'dropbox', ?3, ?4, ?5, ?6, ?7)",
+        "INSERT INTO versions (id, track_id, label, file_source, file_path, file_rev, file_fingerprint, duration_seconds, created_at, dropbox_path)
+         VALUES (?1, ?2, 'Original', 'dropbox', ?3, ?4, ?5, ?6, ?7, ?8)",
         params![
             version_id,
             track_id,
@@ -637,7 +678,8 @@ pub fn insert_dropbox_track(
             dropbox_rev,
             fingerprint,
             duration_seconds,
-            created_at
+            created_at,
+            dropbox_path
         ],
     )
     .map_err(|e| e.to_string())?;

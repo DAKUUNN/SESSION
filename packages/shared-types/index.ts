@@ -22,6 +22,8 @@ export interface Version {
   /** Path to cached downsampled peak data for waveform rendering. */
   peakDataPath?: string;
   createdAt: string;
+  /** Path in the Dropbox app folder once uploaded/synced there (needed for share links). */
+  dropboxPath?: string | null;
 }
 
 export interface Track {

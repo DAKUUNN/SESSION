@@ -54,6 +54,8 @@ pub fn run() {
             dropbox::dropbox_disconnect,
             dropbox::dropbox_list_app_folder,
             dropbox::dropbox_import_file,
+            dropbox::dropbox_upload_version,
+            dropbox::dropbox_get_refresh_token,
             licensing::license_activate,
             licensing::license_get,
             licensing::license_validate,

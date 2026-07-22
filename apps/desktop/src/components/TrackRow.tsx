@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { Track, Version } from "@session/shared-types";
 import { CoverThumb } from "./CoverThumb";
 import { WaveformPlayer } from "./WaveformPlayer";
-import { HeartIcon, PauseIcon, PlayIcon } from "./icons";
+import { HeartIcon, PauseIcon, PlayIcon, ShareIcon } from "./icons";
 import { formatDuration } from "../lib/format";
 import "./TrackRow.css";
 
@@ -15,6 +15,8 @@ interface TrackRowProps {
   onSwitchVersion?: (versionId: string) => void;
   /** Opens a native image picker and sets this track's own cover (individual mode only). */
   onAddCover?: () => void;
+  /** Opens the share-link modal for this track's current version. */
+  onShare?: () => void;
   /** Present in album mode (numbered tracklist); absent in individual mode. */
   index?: number;
   isFavorite: boolean;
@@ -33,6 +35,7 @@ export function TrackRow({
   versions = [],
   onSwitchVersion,
   onAddCover,
+  onShare,
   index,
   isFavorite,
   onToggleFavorite,
@@ -156,6 +159,19 @@ export function TrackRow({
         <span className="track-row__duration">
           {version ? formatDuration(version.durationSeconds) : "--:--"}
         </span>
+
+        {onShare && version ? (
+          <button
+            className="track-share-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              onShare();
+            }}
+            title="Share this version"
+          >
+            <ShareIcon />
+          </button>
+        ) : null}
 
         <button
           className={"favorite-btn" + (isFavorite ? " is-favorite" : "")}

@@ -133,6 +133,10 @@ export const api = {
       fileName,
     }),
 
+  dropboxUploadVersion: (versionId: string) =>
+    invoke<Version>("dropbox_upload_version", { versionId }),
+  dropboxGetRefreshToken: () => invoke<string>("dropbox_get_refresh_token"),
+
   licenseActivate: (licenseKey: string) =>
     invoke<LicenseInfo>("license_activate", { licenseKey }),
   licenseGet: () => invoke<LicenseInfo | null>("license_get"),

@@ -679,7 +679,116 @@ pub async fn dropbox_import_file(
         &project_id,
         &file_name,
         &cache_path_str,
+        &dropbox_path,
         &dropbox_rev,
         duration_seconds,
     )
+}
+
+/// Hands the stored refresh token to the frontend for exactly one purpose:
+/// registering it with our Cloud Functions (`storeDropboxToken`) so the
+/// server can mint temporary streaming links for guest share pages. This is
+/// the one deliberate, documented exception to "tokens never leave the
+/// keychain" (see the share-link section of the project plan) — do not call
+/// it anywhere else.
+#[tauri::command]
+pub fn dropbox_get_refresh_token() -> Result<String, String> {
+    let entry = keyring::Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT)
+        .map_err(|e| e.to_string())?;
+    match entry.get_password() {
+        Ok(token) => Ok(token),
+        Err(keyring::Error::NoEntry) => Err("Dropbox is not connected".into()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// Dropbox's single-request upload limit; larger files need upload sessions,
+/// which aren't implemented yet (surfaced as a clear error instead).
+const UPLOAD_SINGLE_SHOT_LIMIT: u64 = 150 * 1024 * 1024;
+
+#[derive(serde::Deserialize)]
+struct UploadResult {
+    path_lower: Option<String>,
+    path_display: Option<String>,
+    rev: String,
+}
+
+/// Uploads a version's local file into the Dropbox app folder (needed before
+/// it can be shared with a guest link) and records the resulting app-folder
+/// path + rev on the version. No-op if the version is already in Dropbox.
+#[tauri::command]
+pub async fn dropbox_upload_version(
+    db: State<'_, crate::db::DbState>,
+    dropbox: State<'_, DropboxState>,
+    version_id: String,
+) -> Result<crate::models::Version, String> {
+    // Read what we need, then release the DB lock before any await — the
+    // rusqlite connection guard must not be held across suspension points.
+    let version = {
+        let conn = db.0.lock();
+        crate::db::get_version(&conn, &version_id)?
+    };
+
+    if version.dropbox_path.is_some() {
+        return Ok(version);
+    }
+
+    let local_path = version.file.path.clone();
+    let file_name = std::path::Path::new(&local_path)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .ok_or("this version has no usable file name")?;
+
+    let metadata = std::fs::metadata(&local_path)
+        .map_err(|e| format!("could not read '{file_name}': {e}"))?;
+    if metadata.len() > UPLOAD_SINGLE_SHOT_LIMIT {
+        return Err(format!(
+            "'{file_name}' is larger than 150 MB — uploads that size aren't supported yet"
+        ));
+    }
+    let bytes = std::fs::read(&local_path)
+        .map_err(|e| format!("could not read '{file_name}': {e}"))?;
+
+    let access_token = ensure_fresh_token(&dropbox).await?;
+
+    // Keyed by version id so different versions of the same-named file never
+    // collide in the app folder.
+    let target_path = format!("/shared/{version_id}/{file_name}");
+    let api_arg = serde_json::json!({
+        "path": target_path,
+        "mode": "overwrite",
+        "autorename": false,
+        "mute": true
+    })
+    .to_string();
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post("https://content.dropboxapi.com/2/files/upload")
+        .bearer_auth(&access_token)
+        .header("Dropbox-API-Arg", api_arg)
+        .header("Content-Type", "application/octet-stream")
+        .body(bytes)
+        .send()
+        .await
+        .map_err(|e| format!("failed to upload '{file_name}' to Dropbox: {e}"))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Dropbox upload of '{file_name}' failed ({status}): {body}"));
+    }
+
+    let uploaded: UploadResult = resp
+        .json()
+        .await
+        .map_err(|e| format!("unexpected Dropbox upload response: {e}"))?;
+    let stored_path = uploaded
+        .path_lower
+        .or(uploaded.path_display)
+        .unwrap_or(target_path);
+
+    let conn = db.0.lock();
+    crate::db::set_version_dropbox_location(&conn, &version_id, &stored_path, &uploaded.rev)?;
+    crate::db::get_version(&conn, &version_id)
 }

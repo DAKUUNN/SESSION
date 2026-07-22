@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import { onAuthStateChanged, type User } from "firebase/auth";
 import { api } from "../lib/api";
+import { auth } from "../lib/firebase";
+import {
+  addOwnerComment,
+  subscribeToComments,
+  type VersionComment,
+} from "../lib/sharing";
 import { formatDuration } from "../lib/format";
 import "./WaveformPlayer.css";
 
@@ -33,10 +40,9 @@ function getPeaks(path: string): Promise<number[]> {
 interface WaveformPlayerProps {
   path: string;
   /**
-   * Not used yet — kept alongside `path` so that when per-version comments
-   * land later, this component already has the version identity it'll need
-   * to scope comments to (switching versions should only show that
-   * version's comments).
+   * Scopes the comment thread: every comment is pinned to exactly one
+   * version, so switching a track's master version switches which thread
+   * is shown (v1 feedback never appears while v2 is selected).
    */
   versionId?: string;
   positionSeconds: number;
@@ -46,6 +52,7 @@ interface WaveformPlayerProps {
 
 export function WaveformPlayer({
   path,
+  versionId,
   positionSeconds,
   durationSeconds,
   onSeek,
@@ -53,6 +60,15 @@ export function WaveformPlayer({
   const [peaks, setPeaks] = useState<number[] | null>(null);
   const [failed, setFailed] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
+
+  const [user, setUser] = useState<User | null>(null);
+  const [comments, setComments] = useState<VersionComment[]>([]);
+  const [commentText, setCommentText] = useState("");
+  const [commentAt, setCommentAt] = useState<number | null>(null);
+  const [posting, setPosting] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+
+  useEffect(() => onAuthStateChanged(auth, setUser), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,6 +86,15 @@ export function WaveformPlayer({
     };
   }, [path]);
 
+  // Live comment feed for this version — only when signed in (Firestore
+  // rules require an authenticated reader). Signed-out artists simply see
+  // no comments, never an error.
+  useEffect(() => {
+    setComments([]);
+    if (!versionId || !user) return;
+    return subscribeToComments(versionId, setComments, () => setComments([]));
+  }, [versionId, user]);
+
   const effectiveDuration = durationSeconds > 0 ? durationSeconds : 0;
   const playedRatio =
     effectiveDuration > 0 ? Math.min(1, positionSeconds / effectiveDuration) : 0;
@@ -82,13 +107,52 @@ export function WaveformPlayer({
     onSeek(ratio * effectiveDuration);
   }
 
+  async function submitComment(e: React.FormEvent) {
+    e.preventDefault();
+    if (!versionId || !user || !commentText.trim()) return;
+    setPosting(true);
+    try {
+      await addOwnerComment({
+        versionId,
+        ownerUid: user.uid,
+        authorDisplayName: user.email?.split("@")[0] ?? "Artist",
+        timestampInTrackSeconds: commentAt ?? positionSeconds,
+        text: commentText.trim(),
+      });
+      setCommentText("");
+      setCommentAt(null);
+    } catch {
+      /* rules rejected or offline — keep the text so nothing is lost */
+    } finally {
+      setPosting(false);
+    }
+  }
+
   const bars: number[] = peaks ?? new Array(BUCKET_COUNT * 2).fill(0);
   const bucketCount = bars.length / 2;
   const playedBucket = Math.floor(playedRatio * bucketCount);
 
   return (
     <div className="waveform">
-      <div className="waveform__pins" aria-hidden="true" />
+      <div className="waveform__pins" aria-hidden={comments.length === 0}>
+        {effectiveDuration > 0
+          ? comments.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                className="waveform__pin"
+                style={{
+                  left: `${Math.min(100, (c.timestampInTrackSeconds / effectiveDuration) * 100)}%`,
+                }}
+                title={`${formatDuration(c.timestampInTrackSeconds)} — ${c.authorDisplayName}: ${c.text}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSeek(c.timestampInTrackSeconds);
+                }}
+              />
+            ))
+          : null}
+      </div>
       {peaks === null && !failed ? (
         <div className="waveform__loading">Analyzing waveform…</div>
       ) : (
@@ -115,8 +179,74 @@ export function WaveformPlayer({
       )}
       <div className="waveform__meta">
         <span>{formatDuration(positionSeconds)}</span>
+        {versionId && user ? (
+          <button
+            type="button"
+            className="waveform__comments-toggle"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowComments((v) => !v);
+            }}
+          >
+            {comments.length} {comments.length === 1 ? "comment" : "comments"}
+          </button>
+        ) : null}
         <span>{formatDuration(effectiveDuration)}</span>
       </div>
+
+      {showComments && versionId && user ? (
+        <div className="waveform__comments" onClick={(e) => e.stopPropagation()}>
+          {comments.length > 0 ? (
+            <ul className="waveform__comment-list">
+              {comments.map((c) => (
+                <li key={c.id} className="waveform__comment">
+                  <button
+                    type="button"
+                    className="waveform__comment-time"
+                    onClick={() => onSeek(c.timestampInTrackSeconds)}
+                  >
+                    {formatDuration(c.timestampInTrackSeconds)}
+                  </button>
+                  <span
+                    className={
+                      "waveform__comment-author" + (c.authorType === "owner" ? " is-owner" : "")
+                    }
+                  >
+                    {c.authorDisplayName}
+                  </span>
+                  <span className="waveform__comment-text">{c.text}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="waveform__comments-empty">No comments on this version yet.</div>
+          )}
+          <form className="waveform__comment-form" onSubmit={submitComment}>
+            <button
+              type="button"
+              className="waveform__comment-at"
+              onClick={() => setCommentAt(positionSeconds)}
+              title="Pin to the current playback position"
+            >
+              @ {formatDuration(commentAt ?? positionSeconds)}
+            </button>
+            <input
+              className="waveform__comment-input"
+              placeholder="Add a note at this point…"
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              maxLength={1000}
+            />
+            <button
+              type="submit"
+              className="waveform__comment-post"
+              disabled={posting || !commentText.trim()}
+            >
+              {posting ? "…" : "Post"}
+            </button>
+          </form>
+        </div>
+      ) : null}
     </div>
   );
 }

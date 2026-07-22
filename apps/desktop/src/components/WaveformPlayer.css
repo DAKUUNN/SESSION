@@ -61,3 +61,138 @@
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
+
+.waveform__pin {
+  position: absolute;
+  top: 1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent-2);
+  border: 2px solid var(--bg);
+  transform: translateX(-50%);
+  cursor: pointer;
+  padding: 0;
+}
+
+.waveform__comments-toggle {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  padding: 0;
+}
+
+.waveform__comments-toggle:hover {
+  color: var(--accent);
+}
+
+.waveform__comments {
+  margin-top: 10px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 8px;
+  cursor: default;
+}
+
+.waveform__comment-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.waveform__comment {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.waveform__comment-time {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.waveform__comment-author {
+  color: var(--text);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.waveform__comment-author.is-owner {
+  color: var(--accent);
+}
+
+.waveform__comment-text {
+  color: var(--text-dim);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.waveform__comments-empty {
+  color: var(--text-faint);
+  font-size: 11.5px;
+  margin-bottom: 10px;
+}
+
+.waveform__comment-form {
+  display: flex;
+  gap: 6px;
+}
+
+.waveform__comment-at {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 0 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.waveform__comment-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 12px;
+  padding: 6px 9px;
+  outline: none;
+}
+
+.waveform__comment-input:focus-visible {
+  border-color: var(--accent);
+}
+
+.waveform__comment-post {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+.waveform__comment-post:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

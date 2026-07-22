@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getFunctions } from "firebase/functions";
 
 // Public web config — safe to embed client-side (Firebase's client config is
 // not a secret; access is controlled by Firestore/Auth security rules, not
@@ -17,6 +18,11 @@ const firebaseConfig = {
 export const firebaseApp = initializeApp(firebaseConfig);
 export const auth = getAuth(firebaseApp);
 export const db = getFirestore(firebaseApp);
+// Region must match the `region` option on every onCall Cloud Function.
+export const functions = getFunctions(firebaseApp, "europe-west3");
+
+/** Where the guest share SPA is hosted (Firebase Hosting). */
+export const SHARE_BASE_URL = "https://session-9d77a.web.app";
 
 /**
  * Loopback URL Firebase embeds in the magic-link email. Port 5174 — distinct

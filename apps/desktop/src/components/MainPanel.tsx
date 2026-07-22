@@ -31,6 +31,8 @@ interface MainPanelProps {
   onAddProjectCover: () => void;
   /** Opens a native image picker and sets one track's own cover (individual mode). */
   onAddTrackCover: (trackId: string) => void;
+  /** Opens the share-link modal for one track + its current default version. */
+  onShare: (track: Track, version: Version) => void;
 }
 
 export function MainPanel({
@@ -46,6 +48,7 @@ export function MainPanel({
   onEditProject,
   onAddProjectCover,
   onAddTrackCover,
+  onShare,
 }: MainPanelProps) {
   const { nowPlaying, status, loadAndPlay, switchVersion, seek } = player;
 
@@ -186,7 +189,18 @@ export function MainPanel({
                 <button className="icon-btn hero__icon-btn" onClick={handleShuffle} title="Shuffle">
                   <ShuffleIcon />
                 </button>
-                <button className="icon-btn hero__icon-btn" title="Share link">
+                <button
+                  className="icon-btn hero__icon-btn"
+                  title="Share link"
+                  onClick={() => {
+                    // Hero-level share targets the currently playing track if
+                    // it belongs to this project, else the first track.
+                    const current = tracks.find((t) => t.id === nowPlaying?.trackId) ?? tracks[0];
+                    if (!current) return;
+                    const version = defaultVersionFor(current, versionsByTrack);
+                    if (version) onShare(current, version);
+                  }}
+                >
                   <ShareIcon />
                 </button>
               </div>
@@ -225,6 +239,7 @@ export function MainPanel({
                   versions={versionsByTrack[track.id] ?? []}
                   onSwitchVersion={(versionId) => handleSwitchVersion(track, versionId)}
                   onAddCover={() => onAddTrackCover(track.id)}
+                  onShare={version ? () => onShare(track, version) : undefined}
                   index={project.coverStyle === "album" ? i + 1 : undefined}
                   isFavorite={isFavorite(track.id, version?.id)}
                   onToggleFavorite={() => onToggleFavorite(track.id, version?.id)}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { CoverStyle, Playlist, Project } from "@session/shared-types";
+import type { CoverStyle, Playlist, Project, Track, Version } from "@session/shared-types";
 import { api, type ProjectDetail } from "./lib/api";
 import { groupFilesByBaseName } from "./lib/grouping";
 import type { ImportGroup } from "./lib/grouping";
@@ -14,6 +14,7 @@ import { EmptyState } from "./components/EmptyState";
 import { NewProjectModal, type NewProjectModalResult } from "./components/NewProjectModal";
 import { ImportReviewModal } from "./components/ImportReviewModal";
 import { SettingsModal } from "./components/SettingsModal";
+import { ShareModal } from "./components/ShareModal";
 import "./App.css";
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp"];
@@ -44,6 +45,9 @@ function App() {
 
   // Settings modal (Dropbox connection + app-folder browsing/import).
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+
+  // Share-link modal target: one track + the specific version being shared.
+  const [shareTarget, setShareTarget] = useState<{ track: Track; version: Version } | null>(null);
 
   const player = usePlayer();
   // Account + licensing lives app-wide (not inside the modal) so the license
@@ -320,6 +324,10 @@ function App() {
       .catch(() => {});
   }, [selectedProjectId]);
 
+  const handleShare = useCallback((track: Track, version: Version) => {
+    setShareTarget({ track, version });
+  }, []);
+
   const hasProjects = projects.length > 0;
 
   const mainContent = useMemo(() => {
@@ -342,6 +350,7 @@ function App() {
         onEditProject={handleOpenEditProjectModal}
         onAddProjectCover={handleAddProjectCover}
         onAddTrackCover={handleAddTrackCover}
+        onShare={handleShare}
       />
     );
   }, [
@@ -359,6 +368,7 @@ function App() {
     handleOpenEditProjectModal,
     handleAddProjectCover,
     handleAddTrackCover,
+    handleShare,
   ]);
 
   return (
@@ -412,6 +422,16 @@ function App() {
           selectedProjectId={selectedProjectId}
           onImported={handleDropboxImported}
           account={account}
+        />
+      ) : null}
+
+      {shareTarget ? (
+        <ShareModal
+          track={shareTarget.track}
+          version={shareTarget.version}
+          account={account}
+          onClose={() => setShareTarget(null)}
+          onVersionUpdated={handleDropboxImported}
         />
       ) : null}
     </div>

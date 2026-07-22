@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Each user's own doc (email, license key mirror). Owner-only.
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Server-held Dropbox refresh tokens — Cloud Functions (Admin SDK) only.
+    // No client, signed-in or not, may ever touch these.
+    match /dropboxTokens/{uid} {
+      allow read, write: if false;
+    }
+
+    // Share links: created/revoked via Cloud Functions. The owner may read
+    // their own links (to list/manage them in the app); guests never read
+    // these directly — they go through getShareLinkPlaybackInfo, which
+    // re-checks revocation on every request.
+    match /shareLinks/{token} {
+      allow read: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+      allow write: if false;
+    }
+
+    // Timestamped comments, always pinned to a specific versionId (an
+    // unguessable UUID — queries filter on it). Reads are open to any
+    // signed-in identity including anonymous guests, which is what enables
+    // live onSnapshot updates on the guest page. Direct creates are limited
+    // to non-anonymous (owner) authors writing owner comments with sane
+    // shapes; guest comments go through the postShareLinkComment function,
+    // which validates the share token first (Admin SDK bypasses these rules).
+    match /comments/{commentId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous'
+        && request.resource.data.authorType == 'owner'
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 1000;
+      allow delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+      allow update: if false;
+    }
+  }
+}
