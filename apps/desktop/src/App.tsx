@@ -15,6 +15,7 @@ import { NewProjectModal, type NewProjectModalResult } from "./components/NewPro
 import { ImportReviewModal } from "./components/ImportReviewModal";
 import { SettingsModal } from "./components/SettingsModal";
 import { ShareModal } from "./components/ShareModal";
+import { AlbumShareModal } from "./components/AlbumShareModal";
 import "./App.css";
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp"];
@@ -48,6 +49,8 @@ function App() {
 
   // Share-link modal target: one track + the specific version being shared.
   const [shareTarget, setShareTarget] = useState<{ track: Track; version: Version } | null>(null);
+  // Whole-project ("share this whole EP/album") modal — see AlbumShareModal.
+  const [showAlbumShareModal, setShowAlbumShareModal] = useState(false);
 
   const player = usePlayer();
   // Account + licensing lives app-wide (not inside the modal) so the license
@@ -351,6 +354,8 @@ function App() {
         onAddProjectCover={handleAddProjectCover}
         onAddTrackCover={handleAddTrackCover}
         onShare={handleShare}
+        onShareAlbum={() => setShowAlbumShareModal(true)}
+        onNewProject={handleOpenNewProjectModal}
       />
     );
   }, [
@@ -429,9 +434,21 @@ function App() {
         <ShareModal
           track={shareTarget.track}
           version={shareTarget.version}
+          versions={projectDetail?.versionsByTrack[shareTarget.track.id] ?? [shareTarget.version]}
           account={account}
           onClose={() => setShareTarget(null)}
           onVersionUpdated={handleDropboxImported}
+        />
+      ) : null}
+
+      {showAlbumShareModal && projectDetail ? (
+        <AlbumShareModal
+          project={projectDetail.project}
+          tracks={projectDetail.tracks}
+          versionsByTrack={projectDetail.versionsByTrack}
+          account={account}
+          onClose={() => setShowAlbumShareModal(false)}
+          onVersionsUpdated={handleDropboxImported}
         />
       ) : null}
     </div>

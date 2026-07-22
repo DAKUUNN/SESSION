@@ -22,20 +22,35 @@ function errorMessage(err: unknown): string {
 
 interface ShareModalProps {
   track: Track;
+  /** The track's current default/master version — preselected, but any of `versions` can be shared instead. */
   version: Version;
+  /** All of the track's versions, so the artist can pick a different one to share than the current master. */
+  versions: Version[];
   account: AccountApi;
   onClose: () => void;
-  /** Called after the version was uploaded to Dropbox (dropboxPath changed). */
+  /** Called after a version was uploaded to Dropbox (dropboxPath changed). */
   onVersionUpdated: () => void;
 }
 
 /**
- * Creates and manages private guest links for ONE specific version. The
- * link pins the version, so its comment thread stays scoped to what the
- * guest actually heard — even if the artist later changes the master.
+ * Creates and manages private guest links for a track. Defaults to the
+ * current master version, but any version can be picked and shared — the
+ * link pins whichever version was actually selected, so its comment thread
+ * stays scoped to what the guest actually heard, even if the artist later
+ * changes the master.
  */
-export function ShareModal({ track, version, account, onClose, onVersionUpdated }: ShareModalProps) {
+export function ShareModal({
+  track,
+  version: defaultVersion,
+  versions,
+  account,
+  onClose,
+  onVersionUpdated,
+}: ShareModalProps) {
   const { user } = account;
+
+  const [versionId, setVersionId] = useState(defaultVersion.id);
+  const version = versions.find((v) => v.id === versionId) ?? defaultVersion;
 
   const [links, setLinks] = useState<ShareLinkSummary[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -121,7 +136,27 @@ export function ShareModal({ track, version, account, onClose, onVersionUpdated 
 
   return (
     <Modal title={`Share "${track.title}"`} onClose={onClose} width={560}>
-      <div className="share-modal__version tabular">[{version.label.toUpperCase()}]</div>
+      {versions.length > 1 ? (
+        <div className="share-modal__version-picker">
+          <span className="mono-label">Version to share</span>
+          <div className="share-modal__version-pills">
+            {versions.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                className={
+                  "share-modal__version-pill" + (v.id === version.id ? " is-selected" : "")
+                }
+                onClick={() => setVersionId(v.id)}
+              >
+                {v.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="share-modal__version tabular">[{version.label.toUpperCase()}]</div>
+      )}
 
       {!user ? (
         <p className="share-modal__copy">

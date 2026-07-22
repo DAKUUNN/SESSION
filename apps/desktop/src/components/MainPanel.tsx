@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 import type { CoverStyle, Project, Track, Version } from "@session/shared-types";
 import { CoverThumb } from "./CoverThumb";
 import { TrackRow } from "./TrackRow";
-import { EditIcon, PauseIcon, PlayIcon, ShareIcon, ShuffleIcon } from "./icons";
+import { EditIcon, PauseIcon, PlayIcon, PlusIcon, ShareIcon, ShuffleIcon } from "./icons";
 import { formatDuration, formatRelativeTime } from "../lib/format";
 import type { PlayerApi } from "../hooks/usePlayer";
 import { useFileDrop } from "../hooks/useFileDrop";
@@ -33,6 +33,10 @@ interface MainPanelProps {
   onAddTrackCover: (trackId: string) => void;
   /** Opens the share-link modal for one track + its current default version. */
   onShare: (track: Track, version: Version) => void;
+  /** Opens the album-share modal for the whole project. */
+  onShareAlbum: () => void;
+  /** Opens the New Project modal. */
+  onNewProject: () => void;
 }
 
 export function MainPanel({
@@ -49,6 +53,8 @@ export function MainPanel({
   onAddProjectCover,
   onAddTrackCover,
   onShare,
+  onShareAlbum,
+  onNewProject,
 }: MainPanelProps) {
   const { nowPlaying, status, loadAndPlay, switchVersion, seek } = player;
 
@@ -153,6 +159,10 @@ export function MainPanel({
             Individual covers
           </button>
         </div>
+        <button type="button" className="main-panel__new-project" onClick={onNewProject}>
+          <PlusIcon />
+          New project
+        </button>
       </div>
 
       <div className="main-panel__scroll">
@@ -191,15 +201,8 @@ export function MainPanel({
                 </button>
                 <button
                   className="icon-btn hero__icon-btn"
-                  title="Share link"
-                  onClick={() => {
-                    // Hero-level share targets the currently playing track if
-                    // it belongs to this project, else the first track.
-                    const current = tracks.find((t) => t.id === nowPlaying?.trackId) ?? tracks[0];
-                    if (!current) return;
-                    const version = defaultVersionFor(current, versionsByTrack);
-                    if (version) onShare(current, version);
-                  }}
+                  title={`Share the whole ${project.kind}`}
+                  onClick={onShareAlbum}
                 >
                   <ShareIcon />
                 </button>

@@ -8,6 +8,38 @@
   margin-bottom: 14px;
 }
 
+.share-modal__version-picker {
+  margin-bottom: 16px;
+}
+
+.share-modal__version-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.share-modal__version-pill {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 5px 11px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.share-modal__version-pill:hover {
+  color: var(--text);
+}
+
+.share-modal__version-pill.is-selected {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 .share-modal__copy {
   color: var(--text-dim);
   font-size: 12.5px;

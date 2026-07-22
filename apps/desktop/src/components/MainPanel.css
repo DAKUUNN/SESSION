@@ -33,8 +33,35 @@
 .main-panel__toolbar {
   flex-shrink: 0;
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
   padding: 14px 28px 0;
+}
+
+.main-panel__new-project {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 12px 5px 9px;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.main-panel__new-project svg {
+  width: 12px;
+  height: 12px;
+}
+
+.main-panel__new-project:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--surface-2);
 }
 
 .segmented {
