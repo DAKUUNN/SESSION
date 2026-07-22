@@ -52,13 +52,13 @@
 //!    a raw `TcpListener` + manual parsing of one request line is sufficient
 //!    and keeps the dependency list small. Apply a reasonable timeout (e.g.
 //!    ~3 minutes) so this doesn't hang forever if the user abandons the flow.
-//! 5. Exchange the code for tokens: `POST https://api.dropbox.com/oauth2/token`
+//! 5. Exchange the code for tokens: `POST https://api.dropboxapi.com/oauth2/token`
 //!    with form fields `grant_type=authorization_code`, `code=<code>`,
 //!    `client_id=0p4wy3rkh5d9yi6`, `code_verifier=<verifier>`,
 //!    `redirect_uri=http://localhost:5173/dropbox/callback` (still no secret).
 //!    Response JSON includes `access_token`, `expires_in` (seconds),
 //!    `refresh_token`, `account_id`.
-//! 6. Call `POST https://api.dropbox.com/2/users/get_current_account` with
+//! 6. Call `POST https://api.dropboxapi.com/2/users/get_current_account` with
 //!    `Authorization: Bearer <access_token>` (empty JSON body `null`) to get
 //!    the account's email + display name.
 //! 7. Persist the refresh_token (and ideally the access_token + its computed
