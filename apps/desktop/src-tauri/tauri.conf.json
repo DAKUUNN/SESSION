@@ -41,7 +41,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENBNzZCN0IyRDNGQTg0ODgKUldTSWhQclRzcmQyeWpWb3BzaVZYOGRGa0lrRlI5OU9raWM5dkZNWVJYdUxuNlhoRHY3dlVkL3MK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVDMDY1NTdEOEVEOTdFMjgKUldRb2Z0bU9mVlVHWEQ0NEtvTEpncm9Tckswc1owSVdmZGQ5TzZmdGR2SEQ3WHkrbmhoRWJuWFQK",
       "endpoints": [
         "https://github.com/DAKUUNN/SESSION/releases/latest/download/latest.json"
       ],
