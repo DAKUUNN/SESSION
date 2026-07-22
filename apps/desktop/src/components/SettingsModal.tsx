@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { check, type Update } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { api, type DropboxAccountInfo, type DropboxFileEntry } from "../lib/api";
 import { formatFileSize } from "../lib/format";
 import type { AccountApi } from "../hooks/useAccount";
@@ -35,6 +37,88 @@ interface SettingsModalProps {
   /** Experimental "match accent color to cover art" toggle — see useAdaptiveAccent. */
   adaptiveAccentEnabled: boolean;
   onToggleAdaptiveAccent: (enabled: boolean) => void;
+}
+
+type UpdateState = "idle" | "checking" | "upToDate" | "available" | "downloading" | "error";
+
+/** Updates section: checks the GitHub Releases endpoint configured in
+ *  tauri.conf.json's `plugins.updater`, and installs + relaunches on demand. */
+function UpdatesSection() {
+  const [state, setState] = useState<UpdateState>("idle");
+  const [error, setError] = useState<string | null>(null);
+  const [availableVersion, setAvailableVersion] = useState<string | null>(null);
+  // Holds the Update handle between "check" and "install" — check() returns
+  // a live resource, not just version metadata, and downloadAndInstall() is
+  // a method on it.
+  const updateRef = useRef<Update | null>(null);
+
+  async function handleCheck() {
+    setState("checking");
+    setError(null);
+    try {
+      const update = await check();
+      if (update) {
+        updateRef.current = update;
+        setAvailableVersion(update.version);
+        setState("available");
+      } else {
+        setState("upToDate");
+      }
+    } catch (err) {
+      setError(errorMessage(err));
+      setState("error");
+    }
+  }
+
+  async function handleInstall() {
+    if (!updateRef.current) return;
+    setState("downloading");
+    setError(null);
+    try {
+      await updateRef.current.downloadAndInstall();
+      await relaunch();
+    } catch (err) {
+      setError(errorMessage(err));
+      setState("error");
+    }
+  }
+
+  return (
+    <div className="settings-section">
+      <div className="settings-section__head">
+        <span className="mono-label">Updates</span>
+      </div>
+      {state === "available" ? (
+        <div className="settings-account__row">
+          <div className="settings-account__identity">
+            Version <strong>{availableVersion}</strong> is available.
+          </div>
+          <button type="button" className="btn btn--primary" onClick={handleInstall}>
+            Download &amp; install
+          </button>
+        </div>
+      ) : (
+        <div className="settings-account__row">
+          <div className="settings-account__identity">
+            {state === "upToDate"
+              ? "You're on the latest version."
+              : state === "downloading"
+                ? "Installing update…"
+                : "Check for a newer version of Session."}
+          </div>
+          <button
+            type="button"
+            className="btn btn--secondary"
+            onClick={handleCheck}
+            disabled={state === "checking" || state === "downloading"}
+          >
+            {state === "checking" ? "Checking…" : "Check for updates"}
+          </button>
+        </div>
+      )}
+      {error ? <div className="settings-error">{error}</div> : null}
+    </div>
+  );
 }
 
 /** Appearance section: the experimental cover-art-adaptive accent color toggle. */
@@ -454,6 +538,7 @@ export function SettingsModal({
 
   return (
     <Modal title="Settings" onClose={onClose} width={600}>
+      <UpdatesSection />
       <AccountSection account={account} />
       <LicenseSection account={account} />
       <AppearanceSection

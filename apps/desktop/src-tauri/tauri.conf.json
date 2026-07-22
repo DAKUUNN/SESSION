@@ -36,6 +36,18 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENBNzZCN0IyRDNGQTg0ODgKUldTSWhQclRzcmQyeWpWb3BzaVZYOGRGa0lrRlI5OU9raWM5dkZNWVJYdUxuNlhoRHY3dlVkL3MK",
+      "endpoints": [
+        "https://github.com/DAKUUNN/SESSION/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

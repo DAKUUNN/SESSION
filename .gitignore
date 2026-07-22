@@ -5,3 +5,6 @@ target/
 *.log
 functions/lib/
 .firebase/
+# Tauri updater signing keypair — private key must never be committed;
+# it's stored as the TAURI_SIGNING_PRIVATE_KEY(_PASSWORD) repo secret instead.
+.tauri-updater-key/
